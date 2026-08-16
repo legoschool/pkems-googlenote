@@ -1140,7 +1140,13 @@
       headers: { "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(meta)
     }).then(function (res) {
-      if (!res.ok) throw new Error("업로드 시작 실패 (" + res.status + ")");
+      if (!res.ok) {
+        return res.text().then(function (t) {
+          var why = "";
+          try { var j = JSON.parse(t); why = (j.error && j.error.message) || ""; } catch (e) {}
+          throw new Error("업로드 시작 실패 (" + res.status + (why ? " · " + why : "") + ")");
+        });
+      }
       var loc = res.headers.get("Location") || res.headers.get("location");
       if (!loc) throw new Error("NO_LOCATION");
       return putChunks(loc, blob, onProgress);
@@ -1152,7 +1158,8 @@
       return fetch(sessionUrl, { method: "PUT", headers: { "Authorization": "Bearer " + accessToken } })
         .then(function (r) { return r.json(); });
     }
-    function send(start) {
+    // 조각 하나를 보낸다. 토큰이 만료돼 401 이 오면 한 번 새로 받아 다시 보낸다.
+    function send(start, retried) {
       var end = Math.min(start + RESUMABLE_CHUNK, total);
       return fetch(sessionUrl, {
         method: "PUT",
@@ -1162,25 +1169,51 @@
         },
         body: blob.slice(start, end)
       }).then(function (r) {
+        if ((r.status === 401 || r.status === 403) && !retried) {
+          return requestToken(false).then(function () { return send(start, true); });
+        }
         if (r.status === 308) {
           var range = r.headers.get("Range") || r.headers.get("range");
           var next = range ? (parseInt(range.split("-")[1], 10) + 1) : end;
           if (onProgress) onProgress(next / total);
           return send(next);
         }
-        if (!r.ok) throw new Error("업로드 실패 (" + r.status + ")");
+        if (!r.ok) {
+          return r.text().then(function (t) {
+            var why = "";
+            try { var j = JSON.parse(t); why = (j.error && j.error.message) || ""; } catch (e) {}
+            throw new Error("업로드 실패 (" + r.status + (why ? " · " + why : "") + ")");
+          });
+        }
         if (onProgress) onProgress(1);
         return r.json();
       });
     }
     return send(0);
   }
+  // 오류를 사람이 읽을 수 있는 한 줄로 — ProgressEvent 처럼 message 가 없는 것도 있다
+  function errText(e) {
+    if (!e) return "알 수 없는 오류";
+    if (typeof e === "string") return e;
+    if (e.message) return e.message;
+    if (e.name) return e.name;
+    if (typeof ProgressEvent !== "undefined" && e instanceof ProgressEvent) {
+      var t = e.target || {};
+      if (t.error && t.error.name) return "파일 본문을 읽지 못했습니다 (" + t.error.name + ")";
+      return "파일 본문을 읽지 못했습니다";
+    }
+    return String(e);
+  }
+
   // 조각 업로드가 막히면(사내망 등) 작은 파일은 예전 방식으로 올려 본다
   function blobToBase64(blob) {
     return new Promise(function (res, rej) {
       var r = new FileReader();
       r.onload = function () { res(b64of(r.result)); };
-      r.onerror = rej;
+      r.onerror = function (ev) {
+        var err = (r.error && r.error.name) ? r.error.name : "읽기 실패";
+        rej(new Error("파일 본문을 읽지 못했습니다 (" + err + ")"));
+      };
       r.readAsDataURL(blob);
     });
   }
@@ -1192,6 +1225,10 @@
         console.warn("조각 업로드 실패, 예전 방식으로 재시도", e);
         return blobToBase64(b.blob).then(function (b64) {
           return uploadFile(b.name, mime, b64, true, null, parentId);
+        }).catch(function (e2) {
+          // 두 번 다 실패했으면 «처음» 실패한 이유가 진짜 원인이다. 그걸 앞에 세운다.
+          var first = errText(e), second = errText(e2);
+          throw new Error(first + (second && second !== first ? " · 재시도도 실패: " + second : ""));
         });
       });
   }
@@ -1774,7 +1811,8 @@
                   })
                   .catch(function (e) {
                     console.warn("첨부 업로드 실패", b.name, e);
-                    toast("「" + b.name + "」 업로드 실패: " + (e && e.message ? e.message : e));
+                    toast("「" + b.name + "」 업로드 실패: " + errText(e));
+                    toast2("이 기록은 «⏳ 업로드 대기» 로 남습니다. [동기화] 를 다시 누르면 재시도합니다.");
                   });
               });
             }, Promise.resolve());
