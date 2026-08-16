@@ -299,6 +299,10 @@
   .lb-strip img.on { opacity: 1; border-color: #7d9dff; }
   @media (max-width: 700px) { .lb-nav { width: 38px; height: 56px; font-size: 22px; } .lb-strip { display: none; } }
 
+  /* ---------- 코드 삽입 ---------- */
+  .embedframe { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); display: block; }
+  .block.embed textarea { font-size: 12.5px; }
+
   /* ---------- 웹 클리퍼 ---------- */
   .bmk {
     display: inline-block; background: var(--brand); color: #fff; text-decoration: none;
@@ -501,13 +505,16 @@
         <button class="btn sm" data-add="text">＋ 글</button>
         <button class="btn sm" data-add="heading">＋ 소제목</button>
         <button class="btn sm" data-add="image">＋ 사진</button>
-        <button class="btn sm" data-add="capture">📸 화면 캡처</button>
-        <button class="btn sm" data-add="file">＋ 파일</button>
+        <button class="btn sm" data-add="capture">＋ 캡처</button>
+        <button class="btn sm" data-add="file">＋ 파일·영상</button>
         <button class="btn sm" data-add="link">＋ 링크</button>
-        <button class="btn sm" data-add="clip">🌐 웹에서</button>
+        <button class="btn sm" data-add="embed">＋ 코드 삽입</button>
         <button class="btn sm" data-add="quote">＋ 인용</button>
         <button class="btn sm" data-add="divider">＋ 구분선</button>
-        <div class="addhint">파일은 <b>화면 아무 곳에나 끌어다 놓으면</b> 추가됩니다. 글 칸에 이미지 붙여넣기(Ctrl+V)도 됩니다.</div>
+        <div class="addhint">
+          파일은 <b>화면 아무 곳에나 끌어다 놓으면</b> 추가됩니다. 글 칸에 이미지 붙여넣기(Ctrl+V)도 됩니다.
+          영상은 <b>200MB(1080p 기준 약 10~15분)</b> 까지 — 더 길면 유튜브에 «일부공개»로 올리고 <b>＋코드 삽입</b> 에 주소를 붙여넣으세요.
+        </div>
       </div>
       <input type="file" id="fileInput" multiple class="hidden" />
       <input type="file" id="imgInput" accept="image/*" multiple class="hidden" />
@@ -1414,6 +1421,9 @@
         L.push(line); L.push("");
       } else if (b.kind === "link") {
         if (b.url) { L.push("🔗 [" + (b.label || b.url) + "](" + b.url + ")"); L.push(""); }
+      } else if (b.kind === "embed") {
+        // 마크다운은 HTML 을 그대로 품는다 (옵시디언에서도 보임)
+        if (b.code && b.code.trim()) { L.push(b.code.trim()); L.push(""); }
       }
     });
 
@@ -1474,6 +1484,8 @@
         H.push('<p>📎 ' + (b.fileId ? '<a href="' + driveLink(b.fileId) + '">' + esc(nm) + "</a>" : esc(nm)) + "</p>");
       } else if (b.kind === "link") {
         if (b.url) H.push('<p>🔗 <a href="' + esc(b.url) + '">' + esc(b.label || b.url) + "</a></p>");
+      } else if (b.kind === "embed") {
+        if (b.code && b.code.trim()) H.push(b.code.trim());
       }
     });
 
@@ -1512,6 +1524,7 @@
     var o = { id: b.id, kind: b.kind };
     if (b.kind === "text" || b.kind === "heading" || b.kind === "quote") o.text = b.text || "";
     if (b.kind === "link") { o.url = b.url || ""; o.label = b.label || ""; }
+    if (b.kind === "embed") { o.code = b.code || ""; o.height = b.height || 360; }
     if (b.kind === "image" || b.kind === "file") {
       o.original = b.original || ""; o.mime = b.mime || ""; o.size = b.size || 0;
       o.name = b.name || ""; o.caption = b.caption || ""; o.fileId = b.fileId || null;
@@ -1737,10 +1750,25 @@
     heading: { icon: "🔠", label: "소제목" },
     quote:   { icon: "❝", label: "인용" },
     image:   { icon: "🖼️", label: "사진" },
-    file:    { icon: "📎", label: "파일" },
+    file:    { icon: "📎", label: "파일·영상" },
     link:    { icon: "🔗", label: "링크" },
+    embed:   { icon: "🧩", label: "코드 삽입" },
     divider: { icon: "➖", label: "구분선" }
   };
+  // 유튜브 등 주소만 넣어도 알아서 삽입 코드로 바꿔 준다
+  function urlToEmbed(u) {
+    u = String(u || "").trim();
+    var m = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{6,})/.exec(u);
+    if (m) return '<iframe width="560" height="315" src="https://www.youtube.com/embed/' + m[1] +
+      '" title="YouTube" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>';
+    m = /vimeo\.com\/(\d+)/.exec(u);
+    if (m) return '<iframe src="https://player.vimeo.com/video/' + m[1] + '" width="640" height="360" frameborder="0" allowfullscreen></iframe>';
+    m = /docs\.google\.com\/[^\s"']+/.exec(u);
+    if (m) return '<iframe src="' + m[0].replace(/\/(edit|view)[^\s"']*$/, "/preview") + '" width="100%" height="480" frameborder="0"></iframe>';
+    m = /drive\.google\.com\/file\/d\/([\w-]+)/.exec(u);
+    if (m) return '<iframe src="https://drive.google.com/file/d/' + m[1] + '/preview" width="100%" height="420" frameborder="0" allowfullscreen></iframe>';
+    return null;
+  }
 
   // 블록 복사 — JSON 복제를 쓰면 Blob(파일 본문)이 빈 객체로 뭉개진다
   function cloneBlock(b) {
@@ -1753,6 +1781,7 @@
     var b = { id: uid(), kind: kind };
     if (kind === "text" || kind === "heading" || kind === "quote") b.text = "";
     if (kind === "link") { b.url = ""; b.label = ""; }
+    if (kind === "embed") { b.code = ""; b.height = 360; }
     if (kind === "image" || kind === "file") { b.caption = ""; }
     if (data) for (var k in data) if (Object.prototype.hasOwnProperty.call(data, k)) b[k] = data[k];
     return b;
@@ -1761,7 +1790,6 @@
     if (kind === "image") { $("imgInput").click(); return; }
     if (kind === "file") { $("fileInput").click(); return; }
     if (kind === "capture") { startCapture(); return; }
-    if (kind === "clip") { openClipDialog(); return; }
     var b = newBlock(kind, data);
     blocks.push(b);
     renderBlocks();
@@ -1854,6 +1882,42 @@
         lb.addEventListener("input", function () { b.label = lb.value; });
         r1.appendChild(u); r1.appendChild(lb);
         body.appendChild(r1);
+
+      } else if (b.kind === "embed") {
+        var ta2 = el("textarea", "inp mono");
+        ta2.rows = 4;
+        ta2.value = b.code || "";
+        ta2.placeholder = "<iframe …> 삽입 코드를 붙여넣거나, 유튜브·드라이브 주소를 그대로 붙여넣으세요";
+        var pvWrap = el("div"); pvWrap.style.marginTop = "8px";
+        var ctl = el("div", "row"); ctl.style.marginTop = "6px";
+        var hLab = el("span", "desc"); hLab.style.margin = "0"; hLab.textContent = "높이";
+        var hIn = el("input", "inp"); hIn.type = "number"; hIn.min = "80"; hIn.max = "1200";
+        hIn.style.width = "90px"; hIn.value = b.height || 360;
+        var showBtn = el("button", "btn sm", "미리보기 새로고침"); showBtn.type = "button";
+        ctl.appendChild(hLab); ctl.appendChild(hIn); ctl.appendChild(showBtn);
+
+        function repaintEmbed() {
+          pvWrap.innerHTML = "";
+          if (!b.code || !b.code.trim()) {
+            pvWrap.appendChild(el("p", "desc", "코드를 넣으면 여기에 바로 보입니다."));
+            return;
+          }
+          pvWrap.appendChild(embedFrame(b));
+        }
+        ta2.addEventListener("input", function () {
+          var v = ta2.value;
+          var auto = urlToEmbed(v);
+          if (auto && !/[<>]/.test(v)) { v = auto; ta2.value = auto; toast("주소를 삽입 코드로 바꿨습니다."); }
+          b.code = v;
+          touchDraft();
+        });
+        ta2.addEventListener("blur", repaintEmbed);
+        hIn.addEventListener("input", function () { b.height = parseInt(hIn.value, 10) || 360; touchDraft(); });
+        showBtn.addEventListener("click", repaintEmbed);
+        body.appendChild(ta2);
+        body.appendChild(ctl);
+        body.appendChild(pvWrap);
+        setTimeout(repaintEmbed, 0);
 
       } else if (b.kind === "divider") {
         body.appendChild(el("hr"));
@@ -2391,6 +2455,9 @@
     files.forEach(function (f) {
       if (f.size > MAX_FILE_MB * 1024 * 1024) {
         toast("「" + f.name + "」 은 " + MAX_FILE_MB + "MB 를 넘어 건너뜁니다. (" + humanSize(f.size) + ")");
+        if (/^video\//.test(f.type || "")) {
+          toast2("긴 영상은 유튜브에 «일부공개»로 올리고, ＋코드 삽입 에 주소를 붙여넣는 편이 낫습니다.");
+        }
         return;
       }
       var mime = f.type || "application/octet-stream";
@@ -2543,6 +2610,7 @@
     return blocks.some(function (b) {
       if (b.kind === "image" || b.kind === "file") return true;
       if (b.kind === "link") return !!b.url;
+      if (b.kind === "embed") return !!(b.code && b.code.trim());
       if (b.kind === "divider") return false;
       return !!(b.text && b.text.trim());
     });
@@ -2579,6 +2647,7 @@
       if (b.kind === "divider") return true;
       if (b.kind === "image" || b.kind === "file") return true;
       if (b.kind === "link") return !!(b.url && b.url.trim());
+      if (b.kind === "embed") return !!(b.code && b.code.trim());
       return !!(b.text && b.text.trim());
     }).map(function (b) {
       var c = cloneBlock(b);
@@ -2783,6 +2852,22 @@
     return entryText(n).indexOf(searchQ.toLowerCase()) >= 0;
   }
 
+  /* 삽입 코드는 격리된 틀(sandbox iframe) 안에서 보여 준다.
+     allow-same-origin 을 주지 않아, 코드가 이 앱의 데이터나 로그인 정보에 손댈 수 없다. */
+  function embedFrame(b) {
+    var f = el("iframe", "embedframe");
+    f.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms");
+    f.setAttribute("referrerpolicy", "no-referrer");
+    f.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture; fullscreen";
+    f.setAttribute("allowfullscreen", "");
+    f.style.height = (b.height || 360) + "px";
+    f.srcdoc = "<!doctype html><meta charset='utf-8'>" +
+      "<style>html,body{margin:0;padding:0;background:transparent;font-family:system-ui,sans-serif}" +
+      "iframe,img,video{max-width:100%;border:0}*{box-sizing:border-box}</style>" +
+      (b.code || "");
+    return f;
+  }
+
   function isVideo(b) { return /^video\//.test(b.mime || ""); }
   function isAudio(b) { return /^audio\//.test(b.mime || ""); }
 
@@ -2905,6 +2990,9 @@
         var la = el("a", "linkline", "🔗 " + (b.label || b.url));
         la.href = b.url; la.target = "_blank"; la.rel = "noopener noreferrer";
         var w2 = el("div"); w2.appendChild(la); host.appendChild(w2);
+
+      } else if (b.kind === "embed") {
+        if (b.code && b.code.trim()) host.appendChild(embedFrame(b));
       }
     }
   }
@@ -3104,6 +3192,197 @@
   function closeModal() {
     if (modalCleanup) { try { modalCleanup(); } catch (e) {} modalCleanup = null; }
     if (modalEl) { modalEl.remove(); modalEl = null; }
+  }
+
+  /* =========================================================
+     11-8. 폴더에서 가져오기 — 색인에 없는 .md 를 찾아 목록에 넣는다
+     ========================================================= */
+  function listChildren(parentId) {
+    var q = "'" + parentId + "' in parents and trashed=false";
+    return driveJson("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
+      "&fields=files(id,name,mimeType,size,createdTime,modifiedTime)&pageSize=1000" +
+      "&supportsAllDrives=true&includeItemsFromAllDrives=true")
+      .then(function (j) { return j.files || []; })
+      .catch(function () { return []; });
+  }
+  // 폴더와 그 바로 아래 하위 폴더까지 훑는다
+  function scanFolder() {
+    return listChildren(folder.id).then(function (top) {
+      var subs = top.filter(function (f) { return f.mimeType === "application/vnd.google-apps.folder"; });
+      var files = top.filter(function (f) { return f.mimeType !== "application/vnd.google-apps.folder"; })
+        .map(function (f) { f._parent = folder.id; f._parentName = folder.name; return f; });
+      return subs.reduce(function (p, s) {
+        return p.then(function () {
+          return listChildren(s.id).then(function (kids) {
+            kids.forEach(function (k) {
+              if (k.mimeType === "application/vnd.google-apps.folder") return;
+              k._parent = s.id; k._parentName = s.name;
+              files.push(k);
+            });
+          });
+        });
+      }, Promise.resolve()).then(function () { return files; });
+    });
+  }
+  function fetchText(id) {
+    return driveFetch("https://www.googleapis.com/drive/v3/files/" + id + "?alt=media&supportsAllDrives=true")
+      .then(function (r) { return r.ok ? r.text() : ""; })
+      .catch(function () { return ""; });
+  }
+  function unquote(s) {
+    s = String(s || "").trim();
+    if (/^".*"$/.test(s) || /^'.*'$/.test(s)) return s.slice(1, -1).replace(/\\"/g, '"');
+    return s;
+  }
+  function parseFrontMatter(text) {
+    var fm = {}, body = text;
+    var m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+    if (m) {
+      body = text.slice(m[0].length);
+      m[1].split(/\r?\n/).forEach(function (line) {
+        var mm = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+        if (mm) fm[mm[1]] = mm[2].trim();
+      });
+    }
+    return { fm: fm, body: body };
+  }
+  function parseListValue(v) {
+    v = String(v || "").trim();
+    if (!/^\[/.test(v)) return v ? [unquote(v)] : [];
+    return v.replace(/^\[|\]$/g, "").split(",").map(function (s) { return unquote(s); }).filter(Boolean);
+  }
+  // 마크다운 본문을 블록으로 되돌린다
+  function bodyToBlocks(body, siblings) {
+    var out = [], buf = [];
+    function flush() {
+      var t = buf.join("\n").trim();
+      if (t) out.push(newBlock("text", { text: t }));
+      buf = [];
+    }
+    function findSibling(name) {
+      var base = String(name || "").split("/").pop().replace(/^<|>$/g, "");
+      for (var i = 0; i < siblings.length; i++) if (siblings[i].name === base) return siblings[i];
+      return null;
+    }
+    body.split(/\r?\n/).forEach(function (line) {
+      var m;
+      if (/^#\s+/.test(line)) { flush(); return; }              // 제목은 이미 title 로
+      if ((m = /^##\s+(.*)$/.exec(line))) { flush(); out.push(newBlock("heading", { text: m[1].trim() })); return; }
+      if (/^\s*---\s*$/.test(line)) { flush(); out.push(newBlock("divider")); return; }
+      if ((m = /^>\s?(.*)$/.exec(line))) {
+        var last = out[out.length - 1];
+        if (buf.length) flush();
+        if (last && last.kind === "quote") last.text += "\n" + m[1];
+        else out.push(newBlock("quote", { text: m[1] }));
+        return;
+      }
+      if ((m = /^!\[([^\]]*)\]\(<?([^)>]+)>?\)\s*$/.exec(line))) {
+        flush();
+        var sf = findSibling(m[2]);
+        out.push(newBlock("image", {
+          caption: m[1] || "", original: (m[2].split("/").pop() || "").replace(/^<|>$/g, ""),
+          name: sf ? sf.name : (m[2].split("/").pop() || ""),
+          mime: sf ? sf.mimeType : "image/png", size: sf ? Number(sf.size || 0) : 0,
+          fileId: sf ? sf.id : null
+        }));
+        return;
+      }
+      if ((m = /^📎\s*\[([^\]]*)\]\(([^)]+)\)/.exec(line))) {
+        flush();
+        var fid = /\/file\/d\/([\w-]+)/.exec(m[2]);
+        var sf2 = fid ? null : findSibling(m[2]);
+        out.push(newBlock("file", {
+          caption: "", original: m[1], name: sf2 ? sf2.name : m[1],
+          mime: sf2 ? sf2.mimeType : "application/octet-stream",
+          size: sf2 ? Number(sf2.size || 0) : 0,
+          fileId: fid ? fid[1] : (sf2 ? sf2.id : null)
+        }));
+        return;
+      }
+      if ((m = /^🔗\s*\[([^\]]*)\]\(([^)]+)\)/.exec(line))) {
+        flush(); out.push(newBlock("link", { url: m[2], label: m[1] })); return;
+      }
+      if (/^\s*<(iframe|embed|video|div)\b/i.test(line)) {
+        flush(); out.push(newBlock("embed", { code: line.trim(), height: 360 })); return;
+      }
+      if (/^##\s*연결\s*$/.test(line)) { flush(); return; }
+      buf.push(line);
+    });
+    flush();
+    return out;
+  }
+
+  function importFromFolder(status) {
+    if (!connected || !folder.id) { toast("먼저 드라이브에 연결해 주세요."); return Promise.resolve(0); }
+    var known = {};
+    entries.forEach(function (n) {
+      if (n.mdId) known[n.mdId] = 1;
+      if (n.docId) known[n.docId] = 1;
+      if (n.htmlId) known[n.htmlId] = 1;
+      (n.blocks || []).forEach(function (b) { if (b.fileId) known[b.fileId] = 1; });
+    });
+    var byEntryId = {};
+    entries.forEach(function (n) { byEntryId[n.id] = 1; });
+
+    if (status) status.textContent = "폴더를 훑는 중…";
+    return scanFolder().then(function (files) {
+      var mds = files.filter(function (f) {
+        return !known[f.id] && /\.md$/i.test(f.name || "");
+      });
+      if (!mds.length) { if (status) status.textContent = "새로 가져올 .md 파일이 없습니다."; return 0; }
+      if (status) status.textContent = mds.length + "개를 읽는 중…";
+
+      var added = 0, skipped = 0;
+      return mds.reduce(function (p, f) {
+        return p.then(function () {
+          return fetchText(f.id).then(function (text) {
+            if (!text) { skipped++; return; }
+            var parsed = parseFrontMatter(text);
+            var fm = parsed.fm;
+            if (fm.id && byEntryId[fm.id]) { skipped++; return; }  // 이미 있는 기록
+
+            var title = unquote(fm.title) ||
+              (/^#\s+(.*)$/m.exec(parsed.body) || [])[1] ||
+              stemOf(f.name);
+            var typeKey = settings.types[0] ? settings.types[0].key : "";
+            var wanted = unquote(fm.type);
+            settings.types.forEach(function (t) { if (t.label === wanted) typeKey = t.key; });
+
+            var siblings = files.filter(function (x) { return x._parent === f._parent && x.id !== f.id; });
+            var created = Date.parse(fm.created || f.createdTime) || Date.now();
+            var updated = Date.parse(fm.updated || f.modifiedTime) || created;
+
+            var n = {
+              id: fm.id && !byEntryId[fm.id] ? fm.id : uid("k_"),
+              type: typeKey,
+              title: title,
+              tags: parseListValue(fm.tags),
+              blocks: bodyToBlocks(parsed.body, siblings),
+              relations: [],
+              createdAt: created,
+              updatedAt: updated,
+              mdId: f.id,
+              mdName: f.name,
+              folderId: (f._parent !== folder.id) ? f._parent : null,
+              folderName: (f._parent !== folder.id) ? f._parentName : null,
+              _imported: true
+            };
+            byEntryId[n.id] = 1;
+            entries.push(n);
+            added++;
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        if (!added) { if (status) status.textContent = "새로 가져올 것이 없습니다. (건너뜀 " + skipped + ")"; return 0; }
+        entries.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+        invalidateLinks(); saveLocal(); render();
+        if (status) status.textContent = added + "개를 가져와 색인에 넣었습니다.";
+        return saveIndex().then(function () { return added; });
+      });
+    }).catch(function (e) {
+      if (status) status.textContent = "가져오기 실패: " + e.message;
+      return 0;
+    });
   }
 
   /* =========================================================
@@ -3978,7 +4257,8 @@
 
     var tabs = el("div", "tabs");
     var body = el("div", "mbody");
-    var TABS = [["storage", "저장 위치"], ["types", "기록 유형"], ["naming", "파일 이름"], ["advanced", "고급"]];
+    var TABS = [["storage", "저장 위치"], ["types", "기록 유형"], ["naming", "파일 이름"],
+                ["clipper", "웹 클리퍼"], ["advanced", "고급"]];
     TABS.forEach(function (t) {
       var b = el("button", "tab" + (active === t[0] ? " on" : ""), t[1]);
       b.addEventListener("click", function () { active = t[0]; paint(); });
@@ -4020,6 +4300,7 @@
       if (active === "storage") paintStorage();
       else if (active === "types") paintTypes();
       else if (active === "naming") paintNaming();
+      else if (active === "clipper") paintClipper();
       else paintAdvanced();
     }
 
@@ -4103,6 +4384,26 @@
       });
       f3.appendChild(reorg);
       body.appendChild(f3);
+
+      var f5 = el("div", "field");
+      f5.style.borderTop = "1px solid var(--line)";
+      f5.style.paddingTop = "14px";
+      f5.appendChild(el("label", null, "4단계 · 폴더에 있는데 목록에 없는 것 가져오기"));
+      f5.appendChild(el("p", "desc",
+        "이 앱은 색인 파일(PKEMS-index.json)을 보고 목록을 만듭니다. 그래서 옵시디언에서 만든 노트나 " +
+        "드라이브에 직접 넣은 .md 파일은 목록에 안 보입니다. 아래 버튼을 누르면 폴더를 훑어서 " +
+        "그런 파일들을 찾아 색인에 넣어 줍니다. (같은 폴더의 사진·첨부도 함께 연결합니다)"));
+      var imp = el("button", "btn primary", "📥 폴더 훑어서 가져오기");
+      imp.disabled = !connected;
+      imp.addEventListener("click", function () {
+        imp.disabled = true;
+        importFromFolder(status).then(function (n) {
+          imp.disabled = false;
+          if (n) toast(n + "개를 가져왔습니다.");
+        });
+      });
+      f5.appendChild(imp);
+      body.appendChild(f5);
 
       var f4 = el("div", "field");
       var pull = el("button", "btn", "드라이브에서 기록 다시 불러오기");
@@ -4238,6 +4539,53 @@
         "폴더를 바꾸면 이후 저장분에 새 폴더명이 따라붙습니다. " +
         "{확장자} 를 쓰지 않으면 원래 확장자가 자동으로 붙고, 같은 이름이 이미 있으면 -2, -3 이 붙습니다.";
       body.appendChild(note);
+    }
+
+    function paintClipper() {
+      body.appendChild(el("p", "desc",
+        "웹에서 본 것을 이 기록장으로 담아오는 도구입니다. 한 번만 설치하면 어느 사이트에서든 씁니다."));
+
+      var f = el("div", "field");
+      f.appendChild(el("label", null, "🔖 아래 버튼을 브라우저 북마크바로 끌어다 놓으세요"));
+      var bmk = el("a", "bmk", "📋 웹 클리퍼");
+      bmk.href = bookmarkletCode();
+      bmk.draggable = true;
+      bmk.addEventListener("click", function (e) {
+        e.preventDefault();
+        toast("누르는 게 아니라, 북마크바로 끌어다 놓는 것입니다.");
+      });
+      f.appendChild(bmk);
+      var steps = el("ol", "steps");
+      ["위 파란 버튼을 북마크바로 끌어다 놓습니다. (Ctrl+Shift+B 로 북마크바 표시)",
+       "담고 싶은 웹페이지에서 필요한 부분을 마우스로 선택합니다. (선택 안 해도 됩니다)",
+       "북마크바의 «웹 클리퍼» 를 누르면 이 앱이 새 탭에 열리며 제목·주소·선택한 글이 채워집니다.",
+       "메모를 덧붙여 저장하면 끝입니다."
+      ].forEach(function (s) { steps.appendChild(el("li", null, s)); });
+      f.appendChild(steps);
+      var copyBtn = el("button", "btn sm", "북마클릿 주소 복사");
+      copyBtn.style.marginTop = "8px";
+      copyBtn.addEventListener("click", function () {
+        var code = bookmarkletCode();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(code).then(
+            function () { toast("복사했습니다. 북마크를 새로 만들고 주소 칸에 붙여넣으세요."); },
+            function () { window.prompt("아래를 복사해 북마크 주소로 쓰세요", code); });
+        } else window.prompt("아래를 복사해 북마크 주소로 쓰세요", code);
+      });
+      f.appendChild(copyBtn);
+      if (/^http:\/\/localhost/.test(appUrl())) {
+        f.appendChild(el("p", "clipnote", "⚠️ 지금은 localhost 주소로 만들어집니다. 배포한 주소에서 다시 설치하세요."));
+      }
+      body.appendChild(f);
+
+      var f2 = el("div", "field");
+      f2.style.borderTop = "1px solid var(--line)";
+      f2.style.paddingTop = "14px";
+      f2.appendChild(el("label", null, "북마클릿 없이 한 건만 담기"));
+      var one = el("button", "btn", "🌐 주소 넣어서 가져오기");
+      one.addEventListener("click", function () { closeModal(); openClipDialog(); });
+      f2.appendChild(one);
+      body.appendChild(f2);
     }
 
     function paintAdvanced() {
