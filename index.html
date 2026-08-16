@@ -313,8 +313,10 @@
                    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px; }
   .galcap { font-size: 12px; color: var(--ink-soft); margin: -4px 0 10px; }
 
-  .lightbox { position: fixed; inset: 0; z-index: 130; background: rgba(8,10,18,.94);
+  /* 사진 창은 무엇보다 위에. (전체 보기가 140 이라 130 이면 그 뒤에 깔린다) */
+  .lightbox { position: fixed; inset: 0; z-index: 160; background: rgba(8,10,18,.94);
               display: flex; flex-direction: column; touch-action: none; }
+  .lb-fail { color: #f3c6c6; font-size: 14px; text-align: center; padding: 20px; line-height: 1.7; }
   .lb-top { display: flex; align-items: center; gap: 10px; padding: 12px 14px; color: #e8ecf4; font-size: 13.5px; }
   .lb-top .spacer { flex: 1 1 auto; }
   .lb-count { font-variant-numeric: tabular-nums; opacity: .8; }
@@ -2939,17 +2941,19 @@
     lazyObs.observe(imgEl);
   }
 
-  function loadDriveImage(fileId, imgEl) {
-    if (!fileId || !accessToken) return;
+  // onFail — 못 불러왔을 때 알려 준다 (빈 칸만 남기지 않도록)
+  function loadDriveImage(fileId, imgEl, onFail) {
+    if (!fileId) { if (onFail) onFail("사진 정보가 없습니다"); return; }
     if (imgUrlCache[fileId]) { imgEl.src = imgUrlCache[fileId]; return; }
+    if (!accessToken) { if (onFail) onFail("구글 로그인이 풀렸습니다. [동기화] 를 눌러 다시 로그인하세요."); return; }
     driveFetch("https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media&supportsAllDrives=true")
       .then(function (r) { return r.ok ? r.blob() : null; })
       .then(function (b) {
-        if (!b) return;
+        if (!b) { if (onFail) onFail("드라이브에서 사진을 받지 못했습니다"); return; }
         var u = URL.createObjectURL(b);
         imgUrlCache[fileId] = u;
         imgEl.src = u;
-      }).catch(function () {});
+      }).catch(function () { if (onFail) onFail("사진을 불러오지 못했습니다"); });
   }
 
   /* ---------- 사진 슬라이드로 크게 보기 ---------- */
@@ -2972,9 +2976,12 @@
 
     var stage = el("div", "lb-stage");
     var img = el("img");
+    var fail = el("div", "lb-fail");
+    fail.style.display = "none";
+    fail.style.whiteSpace = "pre-line";
     var prev = el("button", "lb-nav prev", "‹");
     var next = el("button", "lb-nav next", "›");
-    stage.appendChild(prev); stage.appendChild(img); stage.appendChild(next);
+    stage.appendChild(prev); stage.appendChild(img); stage.appendChild(fail); stage.appendChild(next);
     box.appendChild(stage);
 
     var cap = el("div", "lb-cap");
@@ -2997,8 +3004,16 @@
       prev.disabled = i === 0;
       next.disabled = i === shots.length - 1;
       img.removeAttribute("src");
+      fail.style.display = "none";
+      img.style.display = "";
+      function showFail(why) {
+        img.style.display = "none";
+        fail.style.display = "";
+        fail.textContent = "🖼️ " + why + "\n오른쪽 위 «드라이브에서 열기» 로는 볼 수 있습니다.";
+      }
       if (s.url) img.src = s.url;
-      else if (s.fileId) loadDriveImage(s.fileId, img);
+      else if (s.fileId) loadDriveImage(s.fileId, img, showFail);
+      else showFail("아직 드라이브에 올라가지 않은 사진입니다");
       if (s.fileId) { openBtn.href = driveLink(s.fileId); openBtn.style.display = ""; }
       else openBtn.style.display = "none";
       Array.prototype.forEach.call(strip.children, function (t, k) { t.className = (k === i ? "on" : ""); });
