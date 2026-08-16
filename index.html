@@ -102,6 +102,15 @@
   .block:focus-within { border-color: var(--brand); }
   .bhead { display: flex; align-items: center; gap: 4px; padding: 5px 8px 3px; }
   .bkind { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); padding-left: 3px; }
+  /* 순서 바꾸기 — 끌어서 옮기거나, 큰 화살표로 한 칸씩 */
+  .bgrip { cursor: grab; font-size: 15px; color: var(--ink-soft); padding: 4px 7px; border-radius: 8px;
+           user-select: none; line-height: 1; }
+  .bgrip:hover { background: var(--line-soft); color: var(--brand); }
+  .bgrip:active { cursor: grabbing; }
+  .btn.bmove { font-size: 18px; font-weight: 800; line-height: 1; min-width: 44px; padding: 7px 10px; }
+  .block.dragging { opacity: .4; }
+  .block.dropbefore { box-shadow: 0 -3px 0 0 var(--brand); }
+  .block.dropafter { box-shadow: 0 3px 0 0 var(--brand); }
   .bbody { padding: 0 8px 8px; }
   .bbody textarea, .bbody input { background: var(--panel); }
   .block.text textarea { min-height: 76px; }
@@ -114,8 +123,12 @@
   .media .ficon { width: 92px; height: 92px; flex: 0 0 auto; border-radius: 10px; background: var(--line-soft);
                   display: flex; align-items: center; justify-content: center; font-size: 34px; }
   .media .minfo { flex: 1 1 auto; min-width: 0; }
-  .media .savedname { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--brand); word-break: break-all; display: block; margin-bottom: 2px; }
-  .media .origname { font-size: 11.5px; color: var(--ink-soft); display: block; margin-bottom: 6px; }
+  /* 파일 이름이 길어도 한 줄에서 끝나게 (전체 이름은 마우스를 올리면 보인다) */
+  .media .savedname { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--brand);
+                      display: block; margin-bottom: 2px;
+                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .media .origname { font-size: 11.5px; color: var(--ink-soft); display: block; margin-bottom: 6px;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .addbar { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px; border: 1px dashed var(--line); border-radius: 12px; background: var(--bg); }
   .addbar .btn { background: var(--panel); }
@@ -149,9 +162,10 @@
   .content figure img { max-width: 100%; max-height: 420px; border-radius: 10px; display: block; border: 1px solid var(--line); }
   .content figcaption { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
   .content .fileline, .content .linkline {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+    display: inline-block; vertical-align: top; font-size: 13px;
     border: 1px solid var(--line); border-radius: 9px; padding: 5px 10px; background: var(--bg);
-    text-decoration: none; color: var(--ink); max-width: 100%; word-break: break-all;
+    text-decoration: none; color: var(--ink); max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .content .fileline:hover, .content .linkline:hover { border-color: var(--brand); color: var(--brand); }
   .collapsed { max-height: 320px; overflow: hidden; position: relative; }
@@ -312,6 +326,34 @@
   .bmk:hover { background: var(--brand-dark); color: #fff; }
   .clipnote { font-size: 12.5px; color: var(--ink-soft); }
 
+  /* ---------- 전체 보기 (한 편을 통째로 읽는 화면) ---------- */
+  .viewer { position: fixed; inset: 0; z-index: 140; background: var(--bg); display: flex; flex-direction: column; }
+  .vtop { display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+          padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .vtop .spacer { flex: 1 1 auto; }
+  .vscroll { flex: 1 1 auto; overflow: auto; }
+  .vpaper { max-width: 800px; margin: 24px auto 64px; background: var(--panel);
+            border: 1px solid var(--line); border-radius: 14px; padding: 36px 40px; box-shadow: var(--shadow); }
+  .vpaper h1 { margin: 8px 0 10px; font-size: 26px; line-height: 1.35; }
+  .vmeta { font-size: 13px; color: var(--ink-soft); }
+  .vpaper .content { max-height: none; overflow: visible; font-size: 15.5px; }
+  .vpaper .content::after { display: none; }
+  .vpaper .content figure img { max-height: none; }
+  .vrel { margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .vrel h4 { margin: 0 0 8px; font-size: 14px; color: var(--ink-soft); }
+  @media (max-width: 700px) { .vpaper { margin: 12px; padding: 22px 18px; } .vpaper h1 { font-size: 21px; } }
+
+  /* 인쇄 = PDF 저장. 전체 보기 화면만 종이에 남긴다 */
+  @media print {
+    body > *:not(#modalHost) { display: none !important; }
+    #modalHost .viewer { position: static; background: #fff; }
+    .vtop { display: none !important; }
+    .vscroll { overflow: visible; }
+    .vpaper { max-width: none; margin: 0; padding: 0; border: none; border-radius: 0; box-shadow: none; background: #fff; }
+    .vpaper .content figure img { max-height: 420px; }
+    .embedframe, .content video, .content audio { display: none !important; }
+  }
+
   /* ---------- 보기 방식 전환 ---------- */
   .viewswitch { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
   .vbtn { border: none; background: transparent; color: var(--ink-soft); font-size: 12.5px; font-weight: 700;
@@ -329,7 +371,9 @@
   #list.gridview .content.collapsed::after { display: none; }
   #list.gridview .content::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
                                    height: 44px; background: linear-gradient(transparent, var(--panel)); pointer-events: none; }
-  #list.gridview .foot { flex: 0 0 auto; margin-top: 0; }
+  #list.gridview .foot { flex: 0 0 auto; margin-top: 0; flex-wrap: nowrap; gap: 5px; }
+  #list.gridview .foot .sdtxt { display: none; }        /* 좁으니 저장 상태는 아이콘만 (툴팁에 전체) */
+  #list.gridview .foot .btn { padding: 7px 9px; font-size: 13px; white-space: nowrap; }
   #list.gridview .morebtn { display: none; }
   #list.gridview .content figure img { max-height: 150px; }
   #list.gridview .rel { display: none; }
@@ -1508,8 +1552,37 @@
       rels.forEach(function (r) { H.push("<li>" + esc(r.title) + (r.label ? " — " + esc(r.label) : "") + "</li>"); });
       H.push("</ul>");
     }
-    return '<html><head><meta charset="utf-8"><title>' + esc(n.title || "") + "</title></head><body>" +
-      H.join("\n") + "</body></html>";
+    return htmlPage(esc(n.title || "(제목 없음)"), H.join("\n"));
+  }
+  // 브라우저로 바로 열어 읽을 수 있게 서식을 입힌 한 장짜리 HTML
+  function htmlPage(titleEsc, inner) {
+    var css = [
+      ":root{--ink:#1c2333;--soft:#5b6479;--line:#e3e7ef;--brand:#3f5bd9;--bg:#f6f7fb}",
+      "*{box-sizing:border-box}",
+      "body{margin:0;padding:36px 18px 72px;background:var(--bg);color:var(--ink);line-height:1.75;",
+      "font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,'Segoe UI',sans-serif;",
+      "font-size:16px;word-break:keep-all}",
+      "main{max-width:760px;margin:0 auto;background:#fff;border:1px solid var(--line);",
+      "border-radius:14px;padding:40px 44px;box-shadow:0 6px 24px rgba(20,30,60,.06)}",
+      "h1{font-size:27px;line-height:1.35;margin:0 0 10px}",
+      "h2{font-size:19px;margin:32px 0 10px;padding-top:4px}",
+      "p{margin:0 0 14px}",
+      "i{color:var(--soft);font-style:normal;font-size:13.5px}",
+      "hr{border:none;border-top:1px solid var(--line);margin:20px 0}",
+      "blockquote{margin:0 0 16px;padding:10px 16px;border-left:3px solid var(--brand);",
+      "background:var(--bg);border-radius:0 10px 10px 0;color:#333c52}",
+      "a{color:var(--brand);text-decoration:none;border-bottom:1px solid rgba(63,91,217,.3)}",
+      "a:hover{border-bottom-color:var(--brand)}",
+      "ul{margin:0 0 14px;padding-left:22px}",
+      "li{margin-bottom:5px}",
+      "img,iframe,video{max-width:100%;border-radius:10px}",
+      "@media(max-width:700px){body{padding:14px 10px 48px}main{padding:22px 18px;border-radius:12px}h1{font-size:22px}}",
+      "@media print{body{background:#fff;padding:0}main{max-width:none;border:none;border-radius:0;box-shadow:none;padding:0}}"
+    ].join("");
+    return '<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8" />\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1" />\n' +
+      "<title>" + titleEsc + "</title>\n<style>" + css + "</style>\n</head>\n<body>\n<main>\n" +
+      inner + "\n</main>\n</body>\n</html>";
   }
   // 구글 문서로 변환 저장 (mimeType 은 문서, 올리는 본문은 HTML)
   function saveAsGoogleDoc(n, parentId) {
@@ -1816,6 +1889,25 @@
     var t = blocks[i]; blocks[i] = blocks[j]; blocks[j] = t;
     renderBlocks();
   }
+  // 끌어서 옮기기 — 지금 끌고 있는 블록
+  var dragBlockId = null;
+  function clearDropMarks() {
+    Array.prototype.forEach.call(document.querySelectorAll(".block.dropbefore, .block.dropafter"), function (e) {
+      e.classList.remove("dropbefore", "dropafter");
+    });
+  }
+  function dropBlockOn(movingId, targetId, after) {
+    var from = blocks.findIndex(function (b) { return b.id === movingId; });
+    if (from < 0) return;
+    var moved = blocks.splice(from, 1)[0];
+    var to = blocks.findIndex(function (b) { return b.id === targetId; });
+    if (to < 0) { blocks.splice(from, 0, moved); return; }
+    blocks.splice(after ? to + 1 : to, 0, moved);
+    dragBlockId = null;
+    clearDropMarks();
+    renderBlocks();
+    touchDraft();
+  }
   function removeBlock(id) {
     blocks = blocks.filter(function (b) { return b.id !== id; });
     renderBlocks();
@@ -1850,16 +1942,53 @@
       wrap.setAttribute("data-bid", b.id);
 
       var head = el("div", "bhead");
+      var grip = el("span", "bgrip", "⠿");
+      grip.title = "끌어서 순서 옮기기";
+      head.appendChild(grip);
       head.appendChild(el("span", "bkind", meta.icon + " " + meta.label));
       head.appendChild(el("span", "spacer"));
-      var up = el("button", "btn xs", "↑"); up.type = "button"; up.disabled = idx === 0;
+      var up = el("button", "btn xs bmove", "▲"); up.type = "button"; up.disabled = idx === 0;
+      up.title = "위로";
       up.addEventListener("click", function () { moveBlock(b.id, -1); });
-      var dn = el("button", "btn xs", "↓"); dn.type = "button"; dn.disabled = idx === blocks.length - 1;
+      var dn = el("button", "btn xs bmove", "▼"); dn.type = "button"; dn.disabled = idx === blocks.length - 1;
+      dn.title = "아래로";
       dn.addEventListener("click", function () { moveBlock(b.id, 1); });
       var rm = el("button", "btn xs danger", "✕"); rm.type = "button";
+      rm.title = "이 블록 지우기";
       rm.addEventListener("click", function () { removeBlock(b.id); });
       head.appendChild(up); head.appendChild(dn); head.appendChild(rm);
       wrap.appendChild(head);
+
+      // 손잡이(⠿)를 잡았을 때만 끌 수 있게 — 글 칸의 글자 선택을 방해하지 않는다
+      grip.addEventListener("mousedown", function () { wrap.draggable = true; });
+      grip.addEventListener("touchstart", function () { wrap.draggable = true; }, { passive: true });
+      wrap.addEventListener("dragstart", function (e) {
+        dragBlockId = b.id;
+        wrap.classList.add("dragging");
+        try { e.dataTransfer.setData("text/plain", b.id); e.dataTransfer.effectAllowed = "move"; } catch (err) {}
+      });
+      wrap.addEventListener("dragend", function () {
+        dragBlockId = null; wrap.draggable = false;
+        wrap.classList.remove("dragging");
+        clearDropMarks();
+      });
+      wrap.addEventListener("dragover", function (e) {
+        if (!dragBlockId || dragBlockId === b.id) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
+        var r = wrap.getBoundingClientRect();
+        var after = (e.clientY - r.top) > r.height / 2;
+        clearDropMarks();
+        wrap.classList.add(after ? "dropafter" : "dropbefore");
+      });
+      wrap.addEventListener("dragleave", function () { wrap.classList.remove("dropbefore", "dropafter"); });
+      wrap.addEventListener("drop", function (e) {
+        if (!dragBlockId || dragBlockId === b.id) return;
+        e.preventDefault();
+        var r = wrap.getBoundingClientRect();
+        var after = (e.clientY - r.top) > r.height / 2;
+        dropBlockOn(dragBlockId, b.id, after);
+      });
 
       var body = el("div", "bbody");
 
@@ -1954,9 +2083,14 @@
           m.appendChild(el("div", "ficon", fileIcon(b.mime, b.original)));
         }
         var info = el("div", "minfo");
-        info.appendChild(el("span", "savedname", previewAttachName(b)));
-        info.appendChild(el("span", "origname", "원본: " + (b.original || "") + " · " + humanSize(b.size) +
-          (b.fileId ? " · ☁ 저장됨" : " · 업로드 대기")));
+        var savedName = el("span", "savedname", previewAttachName(b));
+        savedName.title = previewAttachName(b);          // 잘려도 마우스를 올리면 전체가 보인다
+        info.appendChild(savedName);
+        var origText = "원본: " + (b.original || "") + " · " + humanSize(b.size) +
+          (b.fileId ? " · ☁ 저장됨" : " · 업로드 대기");
+        var origName = el("span", "origname", origText);
+        origName.title = origText;
+        info.appendChild(origName);
         var cap = el("input", "inp");
         cap.placeholder = "설명·캡션(선택)"; cap.value = b.caption || "";
         cap.addEventListener("input", function () { b.caption = cap.value; });
@@ -2989,14 +3123,17 @@
         }
 
       } else if (b.kind === "file") {
-        var a = el("a", "fileline", fileIcon(b.mime, b.name) + " " + (b.caption || b.name || b.original) +
-          (b.fileId ? "" : " · 업로드 대기"));
+        var fileText = fileIcon(b.mime, b.name) + " " + (b.caption || b.name || b.original) +
+          (b.fileId ? "" : " · 업로드 대기");
+        var a = el("a", "fileline", fileText);
+        a.title = fileText;                              // 이름이 길어 잘렸을 때를 위해
         if (b.fileId) { a.href = driveLink(b.fileId); a.target = "_blank"; a.rel = "noopener noreferrer"; }
         else a.href = "javascript:void(0)";
         var w1 = el("div"); w1.appendChild(a); host.appendChild(w1);
 
       } else if (b.kind === "link") {
         var la = el("a", "linkline", "🔗 " + (b.label || b.url));
+        la.title = (b.label ? b.label + " — " : "") + b.url;
         la.href = b.url; la.target = "_blank"; la.rel = "noopener noreferrer";
         var w2 = el("div"); w2.appendChild(la); host.appendChild(w2);
 
@@ -3004,6 +3141,98 @@
         if (b.code && b.code.trim()) host.appendChild(embedFrame(b));
       }
     }
+  }
+
+  /* ---------------------------------------------------------
+     전체 보기 — 한 편을 통째로, 종이처럼 읽는 화면
+     여기서 인쇄(PDF)·구글 문서·HTML·.md·폴더로 모두 이어진다
+     --------------------------------------------------------- */
+  var viewerEl = null;
+  function closeViewer() {
+    if (!viewerEl) return;
+    viewerEl.remove(); viewerEl = null;
+    document.body.style.overflow = "";
+  }
+  function openViewer(n) {
+    closeViewer();
+    var t = typeOf(n.type);
+
+    var box = el("div", "viewer");
+    var top = el("div", "vtop");
+
+    var back = el("button", "btn sm", "← 닫기");
+    back.addEventListener("click", closeViewer);
+    top.appendChild(back);
+    top.appendChild(el("span", "spacer"));
+
+    var pr = el("button", "btn sm primary", "🖨️ 인쇄 · PDF로 저장");
+    pr.title = "인쇄 창에서 «대상»을 «PDF로 저장» 으로 고르면 PDF 파일이 됩니다";
+    pr.addEventListener("click", function () { window.print(); });
+    top.appendChild(pr);
+
+    function linkBtn(label, href, tip) {
+      var a = el("a", "btn sm", label);
+      a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.style.textDecoration = "none";
+      if (tip) a.title = tip;
+      top.appendChild(a);
+    }
+    if (n.docId) linkBtn("📄 구글 문서", "https://docs.google.com/document/d/" + n.docId + "/edit", "구글 문서로 열기");
+    if (n.htmlId) linkBtn("🌐 HTML 파일", driveLink(n.htmlId), "드라이브에 저장된 HTML 파일");
+    if (n.mdId) linkBtn("📝 .md", driveLink(n.mdId), "마크다운 원본");
+    if (n.folderId) linkBtn("📁 폴더", "https://drive.google.com/drive/folders/" + n.folderId, "이 기록의 드라이브 폴더");
+
+    var edit = el("button", "btn sm", "✏️ 편집");
+    edit.addEventListener("click", function () { closeViewer(); loadIntoComposer(n); });
+    top.appendChild(edit);
+
+    var scroll = el("div", "vscroll");
+    var paper = el("article", "vpaper");
+
+    paper.appendChild(el("span", "badge", t.icon + " " + t.label));
+    paper.appendChild(el("h1", null, n.title || "(제목 없음)"));
+    var metaLine = formatDate(n.createdAt);
+    if ((n.tags || []).length) metaLine += "  ·  " + n.tags.map(function (x) { return "#" + x; }).join(" ");
+    paper.appendChild(el("div", "vmeta", metaLine));
+
+    var body = el("div", "content");
+    renderContent(n, body);
+    paper.appendChild(body);
+
+    // 연결 — 나가는 링크와 들어오는 백링크
+    var outs = outLinks(n), ins = backLinks(n);
+    if (outs.length || ins.length) {
+      var rel = el("div", "vrel");
+      rel.appendChild(el("h4", null, "🔗 연결 — 나감 " + outs.length + " · 들어옴 " + ins.length));
+      var chips = el("div", "relchips");
+      outs.forEach(function (l) {
+        var c = el("button", "relchip out" + (l.to ? "" : " missing"), l.title + (l.label ? " · " + l.label : ""));
+        c.type = "button";
+        c.addEventListener("click", function () {
+          if (!l.to) return;
+          var target = null;
+          entries.forEach(function (x) { if (x.id === l.to) target = x; });
+          if (target) openViewer(target);
+        });
+        chips.appendChild(c);
+      });
+      ins.forEach(function (x) {
+        var c = el("button", "relchip in", x.entry.title + (x.label ? " · " + x.label : ""));
+        c.type = "button";
+        c.addEventListener("click", function () { openViewer(x.entry); });
+        chips.appendChild(c);
+      });
+      rel.appendChild(chips);
+      paper.appendChild(rel);
+    }
+
+    scroll.appendChild(paper);
+    box.appendChild(top);
+    box.appendChild(scroll);
+    $("modalHost").appendChild(box);
+    viewerEl = box;
+    document.body.style.overflow = "hidden";
+    scroll.scrollTop = 0;
   }
 
   function renderViewSwitch() {
@@ -3128,26 +3357,19 @@
 
       var foot = el("div", "foot");
       var pending = (n.blocks || []).filter(function (b) { return (b.kind === "image" || b.kind === "file") && !b.fileId; }).length;
-      foot.appendChild(el("span", "sync-dot " + (n.mdId && !pending ? "ok" : "pending"),
-        n.mdId && !pending ? "☁ 드라이브 저장됨" : (connected ? "⏳ 업로드 대기" : "💾 이 기기에만 저장")));
-      if (n.docId) {
-        var gd = el("a", "btn sm", "📄 문서 열기");
-        gd.href = "https://docs.google.com/document/d/" + n.docId + "/edit";
-        gd.target = "_blank"; gd.rel = "noopener noreferrer"; gd.style.textDecoration = "none";
-        foot.appendChild(gd);
-      }
-      if (n.folderId) {
-        var fd = el("a", "btn sm", "📁 폴더");
-        fd.href = "https://drive.google.com/drive/folders/" + n.folderId;
-        fd.target = "_blank"; fd.rel = "noopener noreferrer"; fd.style.textDecoration = "none";
-        foot.appendChild(fd);
-      } else if (n.mdId) {
-        var md = el("a", "btn sm", "📝 .md 열기");
-        md.href = driveLink(n.mdId); md.target = "_blank"; md.rel = "noopener noreferrer";
-        md.style.textDecoration = "none";
-        foot.appendChild(md);
-      }
+      var saved = n.mdId && !pending;
+      var syncIcon = saved ? "☁" : (connected ? "⏳" : "💾");
+      var syncText = saved ? "드라이브 저장됨" : (connected ? "업로드 대기" : "이 기기에만 저장");
+      var sd = el("span", "sync-dot " + (saved ? "ok" : "pending"));
+      sd.appendChild(el("span", "sdico", syncIcon));
+      sd.appendChild(el("span", "sdtxt", " " + syncText));   // 바둑판에서는 아이콘만 남긴다
+      sd.title = syncIcon + " " + syncText;
+      foot.appendChild(sd);
       foot.appendChild(el("span", "spacer"));
+      // 문서·PDF·.md·폴더는 모두 「전체 보기」 안에 모아 두었다
+      var bV = el("button", "btn sm", "👁 전체 보기");
+      bV.addEventListener("click", function () { openViewer(n); });
+      foot.appendChild(bV);
       var bE = el("button", "btn sm", "편집"); bE.addEventListener("click", function () { loadIntoComposer(n); });
       var bD = el("button", "btn sm danger", "삭제"); bD.addEventListener("click", function () { removeEntry(n.id); });
       foot.appendChild(bE); foot.appendChild(bD);
@@ -4692,6 +4914,7 @@
   document.addEventListener("keydown", function (e) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); saveEntry(); }
     if (e.key === "Escape" && modalEl) closeModal();
+    else if (e.key === "Escape" && viewerEl) closeViewer();
   });
 
   /* ---------- 모바일 ↔ PC 자동 동기화 ----------
