@@ -347,14 +347,21 @@
   .block.embed textarea { font-size: 12.5px; }
 
 
-  /* ---------- 웹 클리퍼 ---------- */
-  .bmk {
-    display: inline-block; background: var(--brand); color: #fff; text-decoration: none;
-    padding: 10px 18px; border-radius: 10px; font-weight: 800; font-size: 14.5px;
-    box-shadow: var(--shadow); cursor: grab;
-  }
-  .bmk:hover { background: var(--brand-dark); color: #fff; }
-  .clipnote { font-size: 12.5px; color: var(--ink-soft); }
+  /* ---------- 링크 미리보기 ---------- */
+  .linkcard { display: flex; gap: 10px; align-items: center; max-width: 100%;
+              border: 1px solid var(--line); border-radius: 11px; padding: 8px 11px;
+              background: var(--bg); text-decoration: none; color: var(--ink); margin: 0 0 8px; }
+  .linkcard:hover { border-color: var(--brand); }
+  .linkcard .lc-ico { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 7px;
+                      object-fit: contain; background: var(--panel); padding: 3px; }
+  .linkcard .lc-body { min-width: 0; flex: 1 1 auto; }
+  .linkcard .lc-title { font-size: 13.5px; font-weight: 700; line-height: 1.4;
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .linkcard .lc-host { font-size: 11.5px; color: var(--ink-soft);
+                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .linkcard .lc-thumb { width: 92px; height: 58px; flex: 0 0 auto; border-radius: 8px;
+                        object-fit: cover; background: var(--line-soft); }
+  @media (max-width: 700px) { .linkcard .lc-thumb { width: 68px; height: 44px; } }
 
   /* ---------- 전체 보기 (한 편을 통째로 읽는 화면) ---------- */
   .viewer { position: fixed; inset: 0; z-index: 140; background: var(--bg); display: flex; flex-direction: column; }
@@ -590,13 +597,11 @@
         <button class="btn sm" data-add="image">＋ 사진</button>
         <button class="btn sm" data-add="file">＋ 파일·영상</button>
         <button class="btn sm" data-add="link">＋ 링크</button>
-        <button class="btn sm" id="btnClip">🌐 웹에서 가져오기</button>
         <button class="btn sm" data-add="embed">＋ 코드 삽입</button>
         <button class="btn sm" data-add="divider">＋ 구분선</button>
         <div class="addhint">
           파일은 <b>화면 아무 곳에나 끌어다 놓으면</b> 추가됩니다. 글 칸에 이미지 붙여넣기(Ctrl+V)도 됩니다.
           영상은 <b>200MB(1080p 기준 약 10~15분)</b> 까지 — 더 길면 유튜브에 «일부공개»로 올리고 <b>＋코드 삽입</b> 에 주소를 붙여넣으세요.
-          웹에서 본 것은 <b>🌐 웹에서 가져오기</b> 로 주소·제목·인용을 한 번에 담아옵니다.
         </div>
       </div>
       <input type="file" id="fileInput" multiple class="hidden" />
@@ -3225,25 +3230,75 @@
     return wrap;
   }
 
-  function renderContent(n, host) {
+  /* 링크 미리보기 — 서버 없이 할 수 있는 만큼만.
+     다른 사이트의 제목·대표 이미지는 브라우저 보안(CORS)때문에 가져올 수 없어서,
+     사이트 아이콘 + 주소로 보여 주고, 유튜브만 실제 미리보기 그림을 붙인다. */
+  function ytId(u) {
+    var m = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/.exec(u || "");
+    return m ? m[1] : null;
+  }
+  function linkCard(b) {
+    var url = b.url || "";
+    var site = hostOf(url);
+    var a = el("a", "linkcard");
+    a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.title = url;
+
+    var ico = el("img", "lc-ico");
+    ico.alt = ""; ico.loading = "lazy";
+    if (site) ico.src = "https://www.google.com/s2/favicons?sz=64&domain=" + encodeURIComponent(site);
+    ico.addEventListener("error", function () { ico.remove(); });
+    a.appendChild(ico);
+
+    var yt = ytId(url);
+    var body = el("div", "lc-body");
+    body.appendChild(el("div", "lc-title", b.label || (yt ? "유튜브 영상" : site) || url));
+    body.appendChild(el("div", "lc-host", url.replace(/^https?:\/\//, "")));
+    a.appendChild(body);
+
+    if (yt) {
+      var th = el("img", "lc-thumb");
+      th.alt = ""; th.loading = "lazy";
+      th.src = "https://i.ytimg.com/vi/" + yt + "/mqdefault.jpg";
+      th.addEventListener("error", function () { th.remove(); });
+      a.appendChild(th);
+    }
+    return a;
+  }
+
+  // 기록 보드(카드)에서는 사진·산출물·삽입 코드를 맨 위로 올린다
+  function isMediaGroup(g) {
+    if (g.kind === "images") return true;
+    var k = g.block && g.block.kind;
+    return k === "file" || k === "embed";
+  }
+
+  function renderContent(n, host, opts) {
+    opts = opts || {};
     var shots = shotsOf(n);
-    var shotIndex = 0;
+    var seenImages = 0;
     var blocks = n.blocks || [];
 
     // 연달아 놓인 사진은 슬라이드 묶음으로 보여 준다
     var groups = [], run = null;
     blocks.forEach(function (b) {
       if (b.kind === "image") {
-        if (!run) { run = { kind: "images", items: [] }; groups.push(run); }
+        if (!run) { run = { kind: "images", items: [], start: seenImages }; groups.push(run); }
         run.items.push(b);
+        seenImages++;
       } else { run = null; groups.push({ kind: "one", block: b }); }
     });
+
+    // 순서를 바꿔도 사진 번호가 어긋나지 않도록, 시작 번호는 위에서 미리 매겨 두었다
+    if (opts.mediaFirst) {
+      groups = groups.filter(isMediaGroup).concat(groups.filter(function (g) { return !isMediaGroup(g); }));
+    }
 
     groups.forEach(function (g) {
       // 사진은 어디서나 작은 썸네일로. 누르면 크게 본다 (접기 버튼 없음)
       if (g.kind === "images") {
         var count = g.items.length;
-        var startAt = shotIndex;
+        var startAt = g.start;
         var gal = el("div", "gallery");
         var SHOWN = 8;
         g.items.slice(0, SHOWN).forEach(function (b, k) {
@@ -3267,7 +3322,6 @@
         host.appendChild(gal);
         host.appendChild(el("div", "galcap",
           "🖼️ 사진 " + count + "장 — 누르면 크게 볼 수 있습니다"));
-        shotIndex += count;
         return;
       }
       renderOne(g.block, -1, host);
@@ -3326,10 +3380,7 @@
         var w1 = el("div"); w1.appendChild(a); host.appendChild(w1);
 
       } else if (b.kind === "link") {
-        var la = el("a", "linkline", "🔗 " + (b.label || b.url));
-        la.title = (b.label ? b.label + " — " : "") + b.url;
-        la.href = b.url; la.target = "_blank"; la.rel = "noopener noreferrer";
-        var w2 = el("div"); w2.appendChild(la); host.appendChild(w2);
+        host.appendChild(linkCard(b));
 
       } else if (b.kind === "embed") {
         if (b.code && b.code.trim()) {
@@ -3552,7 +3603,7 @@
       }
 
       var body = el("div", "content" + (expanded[n.id] ? "" : " collapsed"));
-      renderContent(n, body);
+      renderContent(n, body, { mediaFirst: true });   // 보드에서는 사진·산출물·코드가 위로
       card.appendChild(body);
 
       var more = el("button", "btn sm ghost morebtn", expanded[n.id] ? "접기 ▲" : "더 보기 ▼");
@@ -3884,144 +3935,11 @@
     });
   }
 
-  /* =========================================================
-     11-9. 웹 클리퍼 — 웹에서 본 것을 그대로 담아오기
-     ========================================================= */
-  function appUrl() { return location.origin + location.pathname; }
-  function bookmarkletCode() {
-    return "javascript:(function(){" +
-      "var s=(window.getSelection?String(window.getSelection()):'')||'';" +
-      "function m(n){var e=document.querySelector('meta[property=\"'+n+'\"],meta[name=\"'+n+'\"]');return e?e.content:'';}" +
-      "var o={t:document.title,u:location.href,s:s.slice(0,5000),d:m('og:description')||m('description'),i:m('og:image')};" +
-      "var q=encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(o)))));" +
-      "window.open('" + appUrl() + "#clip='+q,'_blank');" +
-      "})()";
-  }
+  /* 링크 주소에서 도메인만 뽑는다 (링크 미리보기·태그에 쓴다) */
   function hostOf(u) {
     try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
   }
-  // 주소창 #clip=... 을 읽어 작성 화면에 채워 넣는다
-  function consumeClipHash() {
-    var m = /[#&]clip=([^&]+)/.exec(location.hash || "");
-    if (!m) return false;
-    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
-    var data;
-    try { data = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); }
-    catch (e) { toast("클리핑 내용을 읽지 못했습니다."); return false; }
-    fillFromClip(data);
-    return true;
-  }
-  function fillFromClip(d) {
-    resetComposer();
-    // '자료' 유형이 있으면 그걸로
-    settings.types.forEach(function (t) { if (t.label === "자료" || t.key === "material") currentType = t.key; });
-    $("title").value = (d.t || "").slice(0, 120);
-    var h = hostOf(d.u || "");
-    if (h) $("tags").value = h;
-    blocks = [];
-    if (d.u) blocks.push(newBlock("link", { url: d.u, label: d.t || h }));
-    if (d.s && d.s.trim()) blocks.push(newBlock("quote", { text: d.s.trim() }));
-    else if (d.d && d.d.trim()) blocks.push(newBlock("quote", { text: d.d.trim() }));
-    blocks.push(newBlock("text", { text: "" }));
-    renderTypeChips(); renderBlocks();
-    $("composerTitle").textContent = "🌐 웹에서 가져온 기록";
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    var note = d.s ? "선택한 글까지" : "제목과 주소를";
-    toast(note + " 가져왔습니다. 메모를 덧붙여 저장하세요.");
-    if (d.i) toast2("대표 이미지가 있습니다 — 필요하면 그 페이지에서 복사해 Ctrl+V 하세요.");
-  }
   var toast2 = function (msg) { setTimeout(function () { toast(msg); }, 3000); };
-
-  // 주소를 직접 붙여넣어 담기
-  function openClipDialog() {
-    closeModal();
-    var bg = el("div", "modal-bg");
-    var m = el("div", "card modal"); m.style.maxWidth = "560px";
-    var head = el("div", "mhead");
-    head.appendChild(el("h3", null, "🌐 웹에서 가져오기"));
-    head.appendChild(el("span", "spacer"));
-    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
-    head.appendChild(x);
-    m.appendChild(head);
-
-    var body = el("div", "mbody");
-
-    var f1 = el("div", "field");
-    f1.appendChild(el("label", null, "주소(URL)"));
-    var uin = el("input", "inp"); uin.placeholder = "https://…";
-    f1.appendChild(uin);
-    body.appendChild(f1);
-
-    var f2 = el("div", "field");
-    f2.appendChild(el("label", null, "제목 (비우면 주소로)"));
-    var tin = el("input", "inp"); tin.placeholder = "이 자료의 제목";
-    f2.appendChild(tin);
-    body.appendChild(f2);
-
-    var f3 = el("div", "field");
-    f3.appendChild(el("label", null, "옮겨 적을 부분 (선택)"));
-    var qin = el("textarea", "inp"); qin.rows = 5;
-    qin.placeholder = "웹에서 복사한 문단을 붙여넣으세요. 인용 블록으로 들어갑니다.";
-    f3.appendChild(qin);
-    body.appendChild(f3);
-
-    body.appendChild(el("p", "clipnote",
-      "브라우저 보안 때문에 앱이 다른 사이트 내용을 대신 읽어올 수는 없습니다. " +
-      "그래서 두 가지 방법을 씁니다 — 여기에 직접 붙여넣거나, 아래 «웹 클리퍼» 를 북마크바에 넣어 두고 한 번에 담아오거나."));
-
-    var f4 = el("div", "field");
-    f4.style.borderTop = "1px solid var(--line)";
-    f4.style.paddingTop = "14px";
-    f4.appendChild(el("label", null, "🔖 웹 클리퍼 — 한 번만 설치하면 어느 사이트에서든"));
-    var bmk = el("a", "bmk", "📋 웹 클리퍼");
-    bmk.href = bookmarkletCode();
-    bmk.draggable = true;
-    bmk.addEventListener("click", function (e) { e.preventDefault(); toast("이 버튼은 눌러서 쓰는 게 아니라, 북마크바로 끌어다 놓는 것입니다."); });
-    f4.appendChild(bmk);
-    var steps = el("ol", "steps");
-    ["위 파란 버튼을 브라우저 북마크바로 끌어다 놓습니다. (Ctrl+Shift+B 로 북마크바 표시)",
-     "담고 싶은 웹페이지에서 필요한 부분을 마우스로 선택합니다. (선택 안 해도 됩니다)",
-     "북마크바의 «웹 클리퍼» 를 누르면, 이 앱이 새 탭에 열리면서 제목·주소·선택한 글이 채워집니다.",
-     "메모를 덧붙이고 저장하면 끝입니다."
-    ].forEach(function (s) { steps.appendChild(el("li", null, s)); });
-    f4.appendChild(steps);
-    var copyBtn = el("button", "btn sm", "북마클릿 주소 복사");
-    copyBtn.style.marginTop = "8px";
-    copyBtn.addEventListener("click", function () {
-      var code = bookmarkletCode();
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(code).then(function () { toast("복사했습니다. 북마크를 새로 만들고 주소 칸에 붙여넣으세요."); },
-          function () { window.prompt("아래를 복사해 북마크 주소로 쓰세요", code); });
-      } else window.prompt("아래를 복사해 북마크 주소로 쓰세요", code);
-    });
-    f4.appendChild(copyBtn);
-    if (/^http:\/\/localhost/.test(appUrl())) {
-      f4.appendChild(el("p", "clipnote", "⚠️ 지금은 localhost 주소로 만들어집니다. 배포한 주소에서 다시 설치하세요."));
-    }
-    body.appendChild(f4);
-    m.appendChild(body);
-
-    var foot = el("div", "mfoot");
-    foot.appendChild(el("span", "spacer"));
-    var cancel = el("button", "btn", "취소");
-    cancel.addEventListener("click", closeModal);
-    var ok = el("button", "btn primary", "가져오기");
-    ok.addEventListener("click", function () {
-      var u = uin.value.trim();
-      if (!u) { toast("주소를 넣어 주세요."); return; }
-      if (!/^https?:\/\//i.test(u)) u = "https://" + u.replace(/^\/+/, "");
-      closeModal();
-      fillFromClip({ t: tin.value.trim() || hostOf(u) || u, u: u, s: qin.value.trim() });
-    });
-    foot.appendChild(cancel); foot.appendChild(ok);
-    m.appendChild(foot);
-
-    bg.appendChild(m);
-    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
-    $("modalHost").appendChild(bg);
-    modalEl = bg;
-    setTimeout(function () { uin.focus(); }, 30);
-  }
 
   /* =========================================================
      12-0. 도움말 — 연결·백링크·관계망이 뭔지 설명
@@ -5113,7 +5031,6 @@
   Array.prototype.forEach.call($("addbar").querySelectorAll("[data-add]"), function (b) {
     b.addEventListener("click", function () { addBlock(b.getAttribute("data-add")); });
   });
-  $("btnClip").addEventListener("click", function () { openClipDialog(); });
   $("fileInput").addEventListener("change", function (e) { acceptFiles(e.target.files); e.target.value = ""; });
   $("imgInput").addEventListener("change", function (e) { acceptFiles(e.target.files); e.target.value = ""; });
   $("cropPickInput").addEventListener("change", function (e) { handlePickedImage(e.target.files[0]); e.target.value = ""; });
@@ -5234,9 +5151,7 @@
   render();
   updateChrome();
   rehydratePending();   // 지난번에 못 올린 사진·파일 되살리기
-  // 웹 클리퍼로 들어온 게 있으면 그걸 우선, 없으면 쓰다 만 내용을 되살린다
-  if (!consumeClipHash()) restoreDraft();
-  window.addEventListener("hashchange", consumeClipHash);
+  restoreDraft();   // 쓰다 만 내용 되살리기
 
   // 기기에 맞는 버튼 이름
   (function () {
