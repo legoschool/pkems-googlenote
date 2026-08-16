@@ -47,12 +47,25 @@
   <h2>2. 저장되는 정보와 위치</h2>
   <table>
     <tr><th>정보</th><th>저장 위치</th><th>목적</th></tr>
-    <tr><td>기록(제목·내용·태그·링크)</td><td>브라우저 localStorage / 지정한 드라이브 폴더의 <code>.md</code> 파일</td><td>기록 보관·조회</td></tr>
-    <tr><td>첨부 사진·파일</td><td>지정한 드라이브 폴더(연결 전에는 브라우저)</td><td>자료 보관</td></tr>
-    <tr><td>목록 색인</td><td>드라이브 폴더의 <code>PKEMS-index.json</code></td><td>기기 간 목록 동기화</td></tr>
+    <tr><td>기록(제목·내용·태그·링크·연결)</td><td>브라우저 localStorage / 지정한 드라이브 폴더의 <code>.md</code>· 구글 문서</td><td>기록 보관·조회</td></tr>
+    <tr><td>첨부 사진·영상·파일</td><td>지정한 드라이브 폴더(올리기 전에는 브라우저 IndexedDB)</td><td>자료 보관</td></tr>
+    <tr><td>작성 중이던 임시본</td><td>브라우저 localStorage + IndexedDB</td><td>창이 꺼져도 이어 쓰기</td></tr>
+    <tr><td>목록 색인·삭제 기록</td><td>드라이브 폴더의 <code>PKEMS-index.json</code></td><td>기기 간 목록 동기화</td></tr>
     <tr><td>구글 계정 이메일</td><td>브라우저 메모리(화면 표시용)</td><td>저장 계정 확인</td></tr>
-    <tr><td>설정값(폴더 ID·이름 규칙)</td><td>브라우저 localStorage</td><td>다음 접속 시 재사용</td></tr>
+    <tr><td>설정값(폴더 ID·이름 규칙·보기 방식)</td><td>브라우저 localStorage + 드라이브 <code>PKEMS-settings.json</code></td><td>다음 접속·다른 기기에서 재사용</td></tr>
   </table>
+  <p>
+    <b>운영자에게 전송되는 정보는 없습니다.</b> 이 앱에는 서버가 없어, 모든 통신은
+    이용자의 브라우저와 구글 API 서버 사이에서만 직접 이루어집니다.
+  </p>
+
+  <h2>2-1. 이용자가 붙여넣은 삽입 코드</h2>
+  <p>
+    「코드 삽입」 기능으로 넣은 HTML(예: 유튜브 삽입 코드)은 <b>격리된 틀(sandbox iframe)</b>
+    안에서만 실행됩니다. 해당 코드는 이 앱의 기록 데이터나 로그인 정보에 접근할 수 없습니다.
+    다만 삽입한 외부 서비스(유튜브 등)는 <b>그 서비스 자체의 개인정보처리방침</b>에 따라
+    이용자 정보를 수집할 수 있습니다.
+  </p>
 
   <h2>3. 구글 계정 접근 권한</h2>
   <p>본 앱은 구글 로그인 시 다음 권한을 요청합니다.</p>
@@ -78,7 +91,7 @@
   <h2>5. 보관 기간과 삭제</h2>
   <ul>
     <li>브라우저 저장분: 브라우저 데이터 삭제 또는 앱에서 기록 삭제 시 제거됩니다.</li>
-    <li>드라이브 저장분: 앱에서 기록을 삭제하면 해당 <code>.md</code> 파일과 첨부 자료가
+    <li>드라이브 저장분: 앱에서 기록을 삭제하면 해당 기록 폴더(<code>.md</code>·구글 문서·첨부 자료)가
       드라이브 <b>휴지통</b>으로 이동합니다. 완전 삭제는 드라이브 휴지통에서 하시면 됩니다.</li>
     <li>구글 계정 연결 해제:
       <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">
