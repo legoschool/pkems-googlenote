@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>개인정보처리방침 · PKEMS 개인 지식·경험 기록장</title>
+<style>
+  body {
+    margin: 0; padding: 0; background: #f5f7fb; color: #1b2130;
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.75;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: #667085; font-size: 13.5px; margin: 0 0 28px; }
+  h2 { font-size: 17px; margin: 30px 0 8px; padding-top: 18px; border-top: 1px solid #e3e8f2; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  code { background: #eaf0ff; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  a { color: #2f5fd6; }
+  .back { display: inline-block; margin-top: 34px; font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 8px; }
+  th, td { border: 1px solid #e3e8f2; padding: 8px 10px; text-align: left; }
+  th { background: #eef2fa; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #12161f; color: #e8ecf4; }
+    .sub { color: #98a2b3; }
+    h2 { border-top-color: #2b3242; }
+    code { background: #232c44; }
+    th { background: #1b202b; }
+    th, td { border-color: #2b3242; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>개인정보처리방침</h1>
+  <p class="sub">PKEMS · 개인 지식·경험 기록장 (이하 "본 앱")</p>
+
+  <h2>1. 본 앱의 성격</h2>
+  <p>
+    본 앱은 서버가 없는 <b>정적 웹페이지</b>입니다. 이용자가 작성한 기록과 첨부 자료는
+    운영자의 서버로 전송되거나 저장되지 않으며, <b>이용자 본인의 브라우저</b>와
+    <b>이용자 본인이 지정한 구글 드라이브 폴더</b>에만 저장됩니다.
+  </p>
+
+  <h2>2. 저장되는 정보와 위치</h2>
+  <table>
+    <tr><th>정보</th><th>저장 위치</th><th>목적</th></tr>
+    <tr><td>기록(제목·내용·태그·링크)</td><td>브라우저 localStorage / 지정한 드라이브 폴더의 <code>.md</code> 파일</td><td>기록 보관·조회</td></tr>
+    <tr><td>첨부 사진·파일</td><td>지정한 드라이브 폴더(연결 전에는 브라우저)</td><td>자료 보관</td></tr>
+    <tr><td>목록 색인</td><td>드라이브 폴더의 <code>PKEMS-index.json</code></td><td>기기 간 목록 동기화</td></tr>
+    <tr><td>구글 계정 이메일</td><td>브라우저 메모리(화면 표시용)</td><td>저장 계정 확인</td></tr>
+    <tr><td>설정값(폴더 ID·이름 규칙)</td><td>브라우저 localStorage</td><td>다음 접속 시 재사용</td></tr>
+  </table>
+
+  <h2>3. 구글 계정 접근 권한</h2>
+  <p>본 앱은 구글 로그인 시 다음 권한을 요청합니다.</p>
+  <ul>
+    <li><code>openid</code>, <code>email</code> — 저장되는 계정을 화면에 표시하기 위함</li>
+    <li><code>https://www.googleapis.com/auth/drive</code> — <b>이용자가 직접 입력한 폴더</b>에 파일을
+      만들고 읽고 수정하기 위함</li>
+  </ul>
+  <p>
+    이용자가 임의의 폴더 ID·링크를 지정하는 기능 특성상 넓은 범위의 드라이브 권한이 필요합니다.
+    다만 본 앱은 <b>지정된 폴더 안의 파일만</b> 조회·생성·수정하며, 그 밖의 드라이브 파일을
+    열람하거나 외부로 전송하지 않습니다. 발급된 접근 토큰은 브라우저 메모리에만 존재하고
+    탭을 닫으면 사라집니다.
+  </p>
+
+  <h2>4. 제3자 제공 및 외부 전송</h2>
+  <p>
+    운영자는 이용자의 기록을 수집하지 않으므로 제3자에게 제공할 정보 자체가 없습니다.
+    통신은 이용자의 브라우저와 구글 API 서버 사이에서만 직접 이루어집니다.
+    광고·분석·추적 스크립트를 사용하지 않습니다.
+  </p>
+
+  <h2>5. 보관 기간과 삭제</h2>
+  <ul>
+    <li>브라우저 저장분: 브라우저 데이터 삭제 또는 앱에서 기록 삭제 시 제거됩니다.</li>
+    <li>드라이브 저장분: 앱에서 기록을 삭제하면 해당 <code>.md</code> 파일과 첨부 자료가
+      드라이브 <b>휴지통</b>으로 이동합니다. 완전 삭제는 드라이브 휴지통에서 하시면 됩니다.</li>
+    <li>구글 계정 연결 해제:
+      <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">
+        구글 계정 → 보안 → 타사 앱 액세스</a>에서 언제든 철회할 수 있습니다.</li>
+  </ul>
+
+  <h2>6. 문의</h2>
+  <p>본 앱에 관한 문의는 앱을 배포한 운영자에게 연락하시기 바랍니다.</p>
+
+  <a class="back" href="index.html">← 기록장으로 돌아가기</a>
+</div>
+</body>
+</html>
