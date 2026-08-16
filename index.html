@@ -160,6 +160,14 @@
   .entry .head .badge { display: inline; margin-right: 7px; white-space: nowrap; }
   .entry .head h3 { display: inline; font-size: 16.5px; line-height: 1.45; }
   .entry .head .when { display: block; margin-top: 6px; }
+  /* 📌 맨 위 고정 */
+  .pinbtn { border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft);
+            font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+            margin-left: 8px; vertical-align: middle; white-space: nowrap; }
+  .pinbtn:hover { border-color: var(--brand); color: var(--brand); }
+  .pinbtn.on { background: #fff4d6; border-color: var(--warn); color: var(--warn); }
+  @media (prefers-color-scheme: dark) { .pinbtn.on { background: #3a2f12; } }
+  .entry.pinned { border-top-color: var(--warn); }
   .badge { font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); white-space: nowrap; }
   .entry h3 { margin: 0; font-size: 16.5px; flex: 1 1 auto; min-width: 0; }
   .when { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
@@ -814,6 +822,7 @@
   var currentType = settings.types[0] ? settings.types[0].key : "";
   var filterType = "all";
   var filterTags = [];      // 태그로 좁혀 보기 (여러 개 고르면 모두 가진 기록만)
+  var filterPinned = false; // 📌 고정한 것만 보기
   var searchQ = "";
   var expanded = {};
 
@@ -1678,6 +1687,7 @@
       id: n.id, type: n.type, title: n.title, tags: n.tags || [],
       blocks: (n.blocks || []).filter(function (b) { return b.kind !== "image" && b.kind !== "file" ? true : !!b.fileId; }).map(slimBlock),
       relations: (n.relations || []).map(function (r) { return { to: r.to, label: r.label || "" }; }),
+      pinned: !!n.pinned,
       createdAt: n.createdAt, updatedAt: n.updatedAt,
       mdId: n.mdId || null, mdName: n.mdName || null,
       docId: n.docId || null, htmlId: n.htmlId || null,
@@ -3008,7 +3018,12 @@
     prev.addEventListener("click", function () { go(-1); });
     next.addEventListener("click", function () { go(1); });
     closeBtn.addEventListener("click", close);
-    box.addEventListener("click", function (e) { if (e.target === box || e.target === stage) close(); });
+    // 사진을 눌러서 열었으면, 사진을 다시 눌러 닫는다 (빈 곳을 눌러도 닫힘)
+    box.addEventListener("click", function (e) {
+      if (e.target === box || e.target === stage || e.target === img) close();
+    });
+    img.style.cursor = "zoom-out";
+    img.title = "누르면 닫힙니다";
     document.addEventListener("keydown", key);
 
     // 손가락으로 넘기기
@@ -3058,6 +3073,13 @@
     all.type = "button";
     all.addEventListener("click", function () { filterType = "all"; render(); });
     host.appendChild(all);
+    var pinCount = entries.filter(function (n) { return n.pinned; }).length;
+    if (pinCount || filterPinned) {
+      var pb = el("button", "chip" + (filterPinned ? " on" : ""), "📌 고정 " + pinCount);
+      pb.type = "button";
+      pb.addEventListener("click", function () { filterPinned = !filterPinned; render(); });
+      host.appendChild(pb);
+    }
     settings.types.forEach(function (t) {
       var c = entries.filter(function (n) { return n.type === t.key; }).length;
       if (!c && filterType !== t.key) return;
@@ -3115,11 +3137,11 @@
       host.appendChild(more);
     }
 
-    if (filterTags.length || filterType !== "all" || searchQ) {
+    if (filterTags.length || filterType !== "all" || searchQ || filterPinned) {
       var clear = el("button", "chip clearchip", "✕ 필터 지우기");
       clear.type = "button";
       clear.addEventListener("click", function () {
-        filterTags = []; filterType = "all"; searchQ = ""; $("search").value = "";
+        filterTags = []; filterType = "all"; searchQ = ""; filterPinned = false; $("search").value = "";
         render();
       });
       host.appendChild(clear);
@@ -3132,6 +3154,7 @@
     })).join(" ").toLowerCase();
   }
   function matches(n) {
+    if (filterPinned && !n.pinned) return false;
     if (filterType !== "all" && n.type !== filterType) return false;
     if (filterTags.length) {
       var mine = n.tags || [];
@@ -3411,6 +3434,15 @@
     });
   }
 
+  // 📌 고정 — 목록 맨 위로 올린다
+  function togglePin(n) {
+    n.pinned = !n.pinned;
+    saveLocal();
+    render();
+    toast(n.pinned ? "맨 위에 고정했습니다." : "고정을 풀었습니다.");
+    if (connected) saveIndex().catch(function () {});
+  }
+
   function render() {
     invalidateLinks();
     renderFilters();
@@ -3419,6 +3451,8 @@
     host.innerHTML = "";
     host.className = "";
     var shown = entries.filter(matches);
+    // 고정한 기록을 맨 위로. 나머지 순서(최신순)는 그대로 둔다
+    shown.sort(function (a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
     $("countText").textContent = entries.length
       ? (shown.length === entries.length ? entries.length + "개" : shown.length + " / " + entries.length + "개") : "";
 
@@ -3468,10 +3502,19 @@
       var card = el("article", "card entry");
       card.setAttribute("data-eid", n.id);
 
+      if (n.pinned) card.classList.add("pinned");
+
       var head = el("div", "head");
       head.appendChild(el("span", "badge", t.icon + " " + t.label));
       head.appendChild(el("h3", null, n.title));
-      head.appendChild(el("span", "when", formatDate(n.createdAt)));
+      var line2 = el("span", "when");
+      line2.appendChild(document.createTextNode(formatDate(n.createdAt)));
+      var pin = el("button", "pinbtn" + (n.pinned ? " on" : ""), n.pinned ? "📌 고정됨" : "📌 고정");
+      pin.type = "button";
+      pin.title = n.pinned ? "맨 위 고정을 풉니다" : "이 기록을 목록 맨 위에 둡니다";
+      pin.addEventListener("click", function () { togglePin(n); });
+      line2.appendChild(pin);
+      head.appendChild(line2);
       card.appendChild(head);
 
       if ((n.tags || []).length) {
@@ -3539,11 +3582,11 @@
       foot.appendChild(sd);
       foot.appendChild(el("span", "spacer"));
       // 문서·PDF·.md·폴더는 모두 「전체 보기」 안에 모아 두었다
-      var bV = el("button", "btn sm", "👁 전체 보기");
+      var bV = el("button", "btn sm", "📖 전체 보기");
       bV.addEventListener("click", function () { openViewer(n); });
       foot.appendChild(bV);
-      var bE = el("button", "btn sm", "편집"); bE.addEventListener("click", function () { loadIntoComposer(n); });
-      var bD = el("button", "btn sm danger", "삭제"); bD.addEventListener("click", function () { removeEntry(n.id); });
+      var bE = el("button", "btn sm", "✏️ 편집"); bE.addEventListener("click", function () { loadIntoComposer(n); });
+      var bD = el("button", "btn sm danger", "🗑️ 삭제"); bD.addEventListener("click", function () { removeEntry(n.id); });
       foot.appendChild(bE); foot.appendChild(bD);
       card.appendChild(foot);
 
@@ -5085,6 +5128,7 @@
   $("search").addEventListener("input", function () { searchQ = this.value.trim(); render(); });
   document.addEventListener("keydown", function (e) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); saveEntry(); }
+    if (e.key === "Escape" && document.querySelector(".lightbox")) return;  // 사진 창이 먼저 닫힌다
     if (e.key === "Escape" && modalEl) closeModal();
     else if (e.key === "Escape" && viewerEl) closeViewer();
   });
