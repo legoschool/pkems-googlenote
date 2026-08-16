@@ -75,17 +75,20 @@
 
 ## B-1. 코드 사본 뜨기 (3분)
 
-### ① 저장소 복제
+### ① 저장소 복제 — `Use this template`
 
-**https://github.com/legoschool/pkems-googlenote** 로 갑니다.
+원본 저장소로 갑니다. (주소는 나눠 준 사람에게 받으세요)
 
-> **보이는 것** — 저장소 이름 오른쪽 위에 `Pin` `Watch` **`Fork`** `Star` 버튼이 한 줄로 있습니다.
+> **보이는 것** — 파일 목록 위 오른쪽에 초록색 **`Use this template`** 버튼.
 >
-> **누를 것** — **`Fork`** → 다음 화면에서 **`Create fork`** (초록 버튼)
-
-![저장소 이름 오른쪽에 Pin · Watch · Fork · Star 버튼이 한 줄로 있습니다](docs/images/01-fork.png)
+> **누를 것** — **`Use this template`** → **`Create a new repository`**
+> → `Repository name` 에 이름 아무거나(예: `내기록장`) → **`Create repository`**
 
 내 계정 아래에 똑같은 저장소가 생깁니다.
+
+> **왜 Fork 가 아니라 템플릿인가** — Fork 는 «원본을 고쳐 되돌려주는» 방식이라
+> 원본과 계속 묶여 있고, 같은 계정에서는 만들 수도 없습니다.
+> 템플릿은 **깨끗한 새 저장소**로 떨어져 나오므로 각자 자기 것으로 쓰기 좋습니다.
 
 ### ② Pages 켜기 ← 이걸 안 하면 사이트가 안 열립니다
 
