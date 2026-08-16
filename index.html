@@ -73,6 +73,8 @@
     .banner.ok { background: #10321f80; border-color: #1e5c3c; color: #97e0bb; }
   }
   .banner .grow { flex: 1 1 240px; }
+  .banner.draft { background: var(--brand-soft); border-color: var(--brand); color: var(--brand);
+                  font-weight: 600; margin: 16px 0 -6px; padding: 10px 14px; }
   .banner a { color: inherit; }
 
   /* ---------- 입력 공통 ---------- */
@@ -474,6 +476,8 @@
   <div id="banner" class="banner warn"></div>
 
   <!-- ================= 에디터 ================= -->
+  <div id="draftBar" class="banner draft hidden"></div>
+
   <section class="card composer">
     <h2 id="composerTitle">✍️ 새 기록</h2>
 
@@ -625,6 +629,7 @@
     entries: "pkems.entries.v2",
     settings: "pkems.settings.v1",
     tombs: "pkems.tombstones.v1",
+    draft: "pkems.draft.v1",
     folder: "pkems.folder",
     cid: "pkems.clientId",
     connected: "pkems.connected"
@@ -844,6 +849,9 @@
           }
         });
       });
+      // 작성 중인 임시본의 파일도 지우면 안 된다
+      var d = safeParse(localStorage.getItem(LS.draft));
+      if (d && d.blocks) d.blocks.forEach(function (b) { used[b.id] = 1; });
       Object.keys(map).forEach(function (k) { if (!used[k]) idbDel(k); });
       if (changed) render();
     });
@@ -1791,6 +1799,7 @@
   }
 
   function renderBlocks() {
+    touchDraft();
     var host = $("blocks");
     host.innerHTML = "";
     if (!blocks.length) {
@@ -2398,6 +2407,112 @@
   }
 
   /* =========================================================
+     8-9. 임시저장 — 쓰다가 창이 꺼져도 그대로 남는다
+     ========================================================= */
+  var draftDirty = false, draftRestored = false;
+  function touchDraft() { draftDirty = true; }
+
+  function draftHasContent() {
+    return !!($("title").value.trim() || $("tags").value.trim() || hasContent());
+  }
+  var lastDraftBody = null;
+  function saveDraft() {
+    if (!draftHasContent()) { clearDraft(true); return; }
+    var body = {
+      editingId: editingId,
+      type: currentType,
+      title: $("title").value,
+      tags: $("tags").value,
+      blocks: blocks.map(function (b) { var c = cloneBlock(b); delete c.blob; return c; })
+    };
+    var json = JSON.stringify(body);
+    if (json === lastDraftBody) return;   // 바뀐 게 없으면 그냥 둔다
+    lastDraftBody = json;
+    var payload = body;
+    payload.savedAt = Date.now();
+    try { localStorage.setItem(LS.draft, JSON.stringify(payload)); } catch (e) {}
+    // 아직 안 올린 파일 본문은 IndexedDB 에 (기록과 같은 방식)
+    blocks.forEach(function (b) {
+      if ((b.kind === "image" || b.kind === "file") && !b.fileId && b.blob) idbPut(b.id, b.blob);
+    });
+    showDraftBar(payload.savedAt);
+  }
+  function clearDraft(silent) {
+    var d = safeParse(localStorage.getItem(LS.draft));
+    localStorage.removeItem(LS.draft);
+    // 저장되지 않고 버려진 임시 파일 정리
+    if (d && d.blocks) {
+      var keep = {};
+      entries.forEach(function (n) { (n.blocks || []).forEach(function (b) { keep[b.id] = 1; }); });
+      d.blocks.forEach(function (b) { if (!keep[b.id]) idbDel(b.id); });
+    }
+    draftDirty = false;
+    lastDraftBody = null;
+    if (!silent) toast("임시 보관한 내용을 지웠습니다.");
+    hideDraftBar();
+  }
+  function restoreDraft() {
+    var d = safeParse(localStorage.getItem(LS.draft));
+    if (!d || !d.blocks) return false;
+    var hasText = (d.title || "").trim() || (d.tags || "").trim() ||
+      d.blocks.some(function (b) { return b.text || b.url || b.name; });
+    if (!hasText) { localStorage.removeItem(LS.draft); return false; }
+
+    editingId = d.editingId || null;
+    currentType = d.type || currentType;
+    $("title").value = d.title || "";
+    $("tags").value = d.tags || "";
+    blocks = d.blocks.map(cloneBlock);
+    if (editingId) {
+      $("composerTitle").textContent = "✏️ 기록 편집 (이어 쓰는 중)";
+      $("btnSave").textContent = "수정 저장";
+      $("btnCancelEdit").classList.remove("hidden");
+    }
+    renderTypeChips(); renderBlocks();
+    // 파일 본문 되살리기
+    idbAll().then(function (map) {
+      var changed = false;
+      blocks.forEach(function (b) {
+        if ((b.kind === "image" || b.kind === "file") && !b.fileId && !b.blob && map[b.id] instanceof Blob) {
+          b.blob = map[b.id]; changed = true;
+        }
+      });
+      if (changed) renderBlocks();
+    });
+    draftRestored = true;
+    lastDraftBody = null;
+    showDraftBar(d.savedAt, true);
+    toast("쓰다 만 내용을 되살렸습니다. 이어서 쓰시면 됩니다.");
+    return true;
+  }
+
+  function showDraftBar(at, restored) {
+    var bar = $("draftBar");
+    bar.innerHTML = "";
+    var t = at ? formatDate(at) : "";
+    var txt = el("span", "grow", restored
+      ? "⏳ 쓰다 만 내용을 되살렸습니다" + (t ? " (" + t + " 저장)" : "") + " — 이어서 쓰시면 됩니다."
+      : "⏳ 임시 보관 중" + (t ? " · " + t : ""));
+    bar.appendChild(txt);
+    var b2 = el("button", "btn sm", "새로 쓰기");
+    b2.title = "지금 쓰던 내용을 버리고 빈 화면으로";
+    b2.addEventListener("click", function () {
+      if (draftHasContent() && !window.confirm("쓰던 내용을 버리고 새로 시작할까요?")) return;
+      clearDraft();
+      resetComposer();
+    });
+    bar.appendChild(b2);
+    bar.classList.remove("hidden");
+  }
+  function hideDraftBar() { $("draftBar").classList.add("hidden"); }
+
+  // 1.5초마다, 그리고 탭을 벗어나거나 닫을 때 저장
+  setInterval(function () { if (draftDirty) { draftDirty = false; saveDraft(); } }, 1500);
+  window.addEventListener("beforeunload", function () { if (draftDirty) saveDraft(); });
+  document.addEventListener("visibilitychange", function () { if (document.hidden && draftDirty) saveDraft(); });
+  window.addEventListener("pagehide", function () { if (draftDirty) saveDraft(); });
+
+  /* =========================================================
      9. 저장 / 편집
      ========================================================= */
   function resetComposer() {
@@ -2476,6 +2591,9 @@
     });
 
     saveLocal();
+    localStorage.removeItem(LS.draft);   // 진짜 저장됐으니 임시본은 지운다
+    draftDirty = false; lastDraftBody = null;
+    hideDraftBar();
     resetComposer();
     render();
     toast(connected ? "저장했습니다. 드라이브에 올리는 중…" : "이 기기에 저장했습니다. (드라이브 미연결)");
@@ -4252,8 +4370,14 @@
   $("title").addEventListener("input", function () {
     if (blocks.some(function (b) { return (b.kind === "image" || b.kind === "file") && !b.name; })) renderBlocks();
   });
+  // 무엇을 고치든 임시저장 대상으로 표시
+  $("blocks").addEventListener("input", touchDraft);
+  $("title").addEventListener("input", touchDraft);
+  $("tags").addEventListener("input", touchDraft);
+  $("typeChips").addEventListener("click", touchDraft);
+
   $("btnSave").addEventListener("click", saveEntry);
-  $("btnCancelEdit").addEventListener("click", resetComposer);
+  $("btnCancelEdit").addEventListener("click", function () { clearDraft(true); resetComposer(); });
   $("search").addEventListener("input", function () { searchQ = this.value.trim(); render(); });
   document.addEventListener("keydown", function (e) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); saveEntry(); }
@@ -4308,7 +4432,8 @@
   render();
   updateChrome();
   rehydratePending();   // 지난번에 못 올린 사진·파일 되살리기
-  consumeClipHash();    // 웹 클리퍼로 넘어온 내용이 있으면 채워 넣기
+  // 웹 클리퍼로 들어온 게 있으면 그걸 우선, 없으면 쓰다 만 내용을 되살린다
+  if (!consumeClipHash()) restoreDraft();
   window.addEventListener("hashchange", consumeClipHash);
 
   // 기기에 맞는 버튼 이름
