@@ -1,27 +1,42 @@
 # 📷 안내문에 넣을 화면 캡처
 
-`SETUP.md` 의 복제 안내에 넣을 캡처를 이 폴더에 모읍니다.
-**아래 파일 이름 그대로** 저장해 주시면 문서에 바로 끼워 넣겠습니다.
+`SETUP.md` 의 복제 안내(🅑)에 들어가는 캡처입니다.
+**1~13번은 넣었습니다.** 남은 것은 **14·15번 두 장**뿐입니다.
 
 캡처 방법: `Win + Shift + S` (맥 `⌘⇧4`) → 영역 선택 → 붙여넣기로 저장
 
-| 순번 | 파일 이름 | 무엇을 찍나 |
+## 넣은 것 (13장)
+
+| 순번 | 파일 이름 | 무엇을 찍었나 |
 |---|---|---|
 | 1 | `01-fork.png` | 원본 저장소 오른쪽 위 `Pin / Watch / **Fork** / Star` 버튼 줄 |
-| 2 | `02-pages.png` | 내 저장소 `Settings → Pages` 의 **Source** 드롭다운을 `GitHub Actions` 로 바꾼 상태 |
+| 2 | `02-pages.png` | `Settings → Pages` 의 **Source** 드롭다운이 `GitHub Actions` 인 상태 |
 | 3 | `03-actions.png` | `Actions` 탭에서 `Deploy to GitHub Pages` 가 **초록 체크**로 끝난 화면 |
-| 4 | `04-new-project.png` | 구글 콘솔 맨 위 파란 띠의 **프로젝트 선택** 드롭다운 + `새 프로젝트` 버튼 |
-| 5 | `05-drive-api.png` | `Google Drive API` 페이지의 **`API 사용 설정됨`** (또는 `사용` 버튼) |
-| 6 | `06-branding.png` | `인증 플랫폼 → 브랜딩` 의 **앱 이름** 칸 |
-| 7 | `07-audience.png` | `인증 플랫폼 → 대상` 의 **게시 상태 / 사용자 유형** 부분 |
-| 8 | `08-scopes-panel.png` | `데이터 액세스 → 범위 추가 또는 삭제` 를 눌러 나온 **`선택한 범위 업데이트`** 패널 위쪽 (email·openid 체크된 상태) |
-| 9 | `09-scopes-manual.png` | 같은 패널 **맨 아래 `직접 범위 추가`** 칸에 drive 주소를 붙여넣고 `테이블에 추가` 가 파래진 상태 |
-| 10 | `10-scopes-saved.png` | 저장 후 `제한된 범위` 표에 **`.../auth/drive`** 가 들어간 화면 |
-| 11 | `11-client-origin.png` | `클라이언트 만들기` 의 **승인된 JavaScript 원본** 에 주소를 넣은 상태 |
-| 12 | `12-client-id.png` | 생성 직후 **클라이언트 ID** 팝업 ⚠️ **보안 비밀번호는 가리고 찍어 주세요** |
-| 13 | `13-edit-clientid.png` | GitHub 에서 `index.html` 의 `OWNER_CLIENT_ID` 줄을 고치는 화면 |
-| 14 | `14-consent.png` | 첫 로그인 때 뜨는 **"확인하지 않은 앱"** + 권한 3줄 화면 |
-| 15 | `15-folder-connect.png` | 앱 `⚙️ 설정` 에서 폴더를 연결해 **초록 띠**가 뜬 상태 |
+| 4 | `04-new-project.png` | **프로젝트 선택** 창 오른쪽 위의 `새 프로젝트` 버튼 |
+| 5 | `05-drive-api.png` | `Google Drive API` 페이지의 **`API 사용 설정됨`** |
+| 6 | `06-branding.png` | `인증 플랫폼 → 브랜딩` 의 **앱 이름** 칸 (왼쪽 메뉴까지 함께) |
+| 7 | `07-audience.png` | `인증 플랫폼 → 대상` 의 **게시 상태 / 사용자 유형** |
+| 8 | `08-scopes-panel.png` | **`선택한 범위 업데이트`** 패널 위쪽 — drive·email·openid 체크, profile 체크 안 함 |
+| 9 | `09-scopes-manual.png` | 패널 맨 아래 **`직접 범위 추가`** 에 drive 주소를 붙여넣어 `테이블에 추가` 가 파래진 상태 |
+| 10 | `10-scopes-saved.png` | `제한된 범위` 표에 **`.../auth/drive`** 가 들어간 화면 |
+| 11 | `11-client-origin.png` | **승인된 JavaScript 원본** 에 주소를 넣고 리디렉션 URI 는 비운 상태 |
+| 12 | `12-client-id.png` | 생성 직후 **클라이언트 ID** 창 — **보안 비밀번호는 검게 덮어서** 찍음 |
+| 13 | `13-edit-clientid.png` | GitHub 편집 화면의 `OWNER_CLIENT_ID` 줄(568행) |
+
+## 아직 없는 것 (2장)
+
+| 순번 | 파일 이름 | 무엇을 찍나 | 왜 못 찍었나 |
+|---|---|---|---|
+| 14 | `14-consent.png` | 첫 로그인 때 뜨는 **"확인하지 않은 앱"** + 권한 3줄 화면 | 구글 로그인을 통과해야 나오는 화면이라 **비밀번호 입력이 필요**합니다 |
+| 15 | `15-folder-connect.png` | 앱 `⚙️ 설정` 에서 폴더를 연결해 **초록 띠**가 뜬 상태 | 위와 같음 (로그인 뒤라야 폴더를 연결할 수 있음) |
+
+두 장은 **직접 찍어 이 폴더에 위 이름 그대로** 넣으시면 됩니다.
+넣은 뒤 `SETUP.md` 의 **B-4** 단락에 아래 두 줄을 끼우면 끝입니다.
+
+```markdown
+![첫 로그인 때 나오는 확인하지 않은 앱 화면](docs/images/14-consent.png)
+![설정에서 폴더를 연결하면 초록 띠가 뜹니다](docs/images/15-folder-connect.png)
+```
 
 ---
 
