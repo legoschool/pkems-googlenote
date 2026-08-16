@@ -144,8 +144,17 @@
   .count { font-size: 13px; color: var(--ink-soft); }
   .search { flex: 0 1 300px; }
   .filters { margin-bottom: 14px; }
+  .tagfilters { margin: -8px 0 14px; align-items: center; }
+  .flabel { font-size: 12px; color: var(--ink-soft); font-weight: 700; padding-right: 2px; align-self: center; }
+  .chip.tagchip { font-size: 12.5px; padding: 5px 11px; }
+  .chip.ghostchip { border-style: dashed; }
+  .chip.clearchip { border-color: var(--danger); color: var(--danger); }
+  .tag.pick { cursor: pointer; }
+  .tag.pick:hover { border-color: var(--brand); color: var(--brand); }
+  .tag.pick.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
 
-  .entry { padding: 16px 18px; margin-bottom: 12px; }
+  /* 기록마다 위쪽에 색 줄을 둬서 어디서 끊기는지 한눈에 보이게 한다 */
+  .entry { padding: 16px 18px; margin-bottom: 12px; border-top: 3px solid var(--brand); }
   .entry .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .badge { font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); white-space: nowrap; }
   .entry h3 { margin: 0; font-size: 16.5px; flex: 1 1 auto; min-width: 0; }
@@ -314,8 +323,18 @@
   @media (max-width: 700px) { .lb-nav { width: 38px; height: 56px; font-size: 22px; } .lb-strip { display: none; } }
 
   /* ---------- 코드 삽입 ---------- */
+  /* 삽입한 페이지는 모서리를 끌어 크기를 바꿀 수 있게 한다 */
+  .embedbox { position: relative; width: 100%; margin: 0 0 6px; padding-bottom: 15px;
+              resize: vertical; overflow: hidden; min-height: 120px;
+              border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  .embedbox > iframe.embedframe { width: 100%; height: 100%; border: none; border-radius: 10px 10px 0 0; display: block; }
+  .embedhint { font-size: 11.5px; color: var(--ink-soft); margin: -2px 0 10px; }
   .embedframe { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); display: block; }
   .block.embed textarea { font-size: 12.5px; }
+
+  /* 사진 접기 */
+  .photobox { margin: 0 0 10px; }
+  .btn.photobtn { font-size: 12.5px; padding: 6px 11px; }
 
   /* ---------- 웹 클리퍼 ---------- */
   .bmk {
@@ -351,7 +370,7 @@
     .vscroll { overflow: visible; }
     .vpaper { max-width: none; margin: 0; padding: 0; border: none; border-radius: 0; box-shadow: none; background: #fff; }
     .vpaper .content figure img { max-height: 420px; }
-    .embedframe, .content video, .content audio { display: none !important; }
+    .embedbox, .embedhint, .content video, .content audio { display: none !important; }
   }
 
   /* ---------- 보기 방식 전환 ---------- */
@@ -553,15 +572,15 @@
       <label>내용 <span style="font-weight:400;color:var(--ink-soft)">— 글·사진·링크를 원하는 순서로 계속 이어 붙이세요</span></label>
       <div id="blocks"></div>
       <div class="addbar" id="addbar">
-        <button class="btn sm" data-add="text">＋ 글</button>
         <button class="btn sm" data-add="heading">＋ 소제목</button>
-        <button class="btn sm" data-add="image">＋ 사진</button>
+        <button class="btn sm" data-add="text">＋ 글</button>
+        <button class="btn sm" data-add="quote">＋ 인용</button>
         <button class="btn sm" data-add="capture">＋ 캡처</button>
+        <button class="btn sm" data-add="image">＋ 사진</button>
         <button class="btn sm" data-add="file">＋ 파일·영상</button>
         <button class="btn sm" data-add="link">＋ 링크</button>
         <button class="btn sm" id="btnClip">🌐 웹에서 가져오기</button>
         <button class="btn sm" data-add="embed">＋ 코드 삽입</button>
-        <button class="btn sm" data-add="quote">＋ 인용</button>
         <button class="btn sm" data-add="divider">＋ 구분선</button>
         <div class="addhint">
           파일은 <b>화면 아무 곳에나 끌어다 놓으면</b> 추가됩니다. 글 칸에 이미지 붙여넣기(Ctrl+V)도 됩니다.
@@ -592,6 +611,7 @@
     <input id="search" class="inp search" placeholder="제목·내용·태그 검색" />
   </div>
   <div class="chips filters" id="typeFilters"></div>
+  <div class="chips filters tagfilters" id="tagFilters"></div>
   <div id="list"></div>
 
   <footer class="site">
@@ -793,8 +813,10 @@
   var editingId = null;
   var currentType = settings.types[0] ? settings.types[0].key : "";
   var filterType = "all";
+  var filterTags = [];      // 태그로 좁혀 보기 (여러 개 고르면 모두 가진 기록만)
   var searchQ = "";
   var expanded = {};
+  var photoOpen = {};       // 카드에서 사진 묶음을 펼쳐 둔 곳
 
   var tokenClient = null, accessToken = null, connected = false, userEmail = "";
   var indexFileId = null, settingsFileId = null, subFolderId = null;
@@ -1359,7 +1381,9 @@
   // 목록에서 해당 기록으로 이동 + 잠깐 강조
   function gotoEntry(id) {
     closeModal();
-    if (filterType !== "all" || searchQ) { filterType = "all"; searchQ = ""; $("search").value = ""; render(); }
+    if (filterType !== "all" || searchQ || filterTags.length) {
+      filterType = "all"; searchQ = ""; filterTags = []; $("search").value = ""; render();
+    }
     expanded[id] = true;
     render();
     setTimeout(function () {
@@ -2967,6 +2991,9 @@
     host.appendChild(add);
   }
 
+  var tagsExpanded = false;
+  var TAGS_SHOWN = 12;
+
   function renderFilters() {
     var host = $("typeFilters");
     host.innerHTML = "";
@@ -2982,6 +3009,64 @@
       b.addEventListener("click", function () { filterType = t.key; render(); });
       host.appendChild(b);
     });
+    renderTagFilters();
+  }
+
+  // 태그로 좁혀 보기 — 유형 안에서 다시 추리는 용도.
+  // 태그를 여러 개 고르면 «그 태그를 모두 가진» 기록만 남는다.
+  function renderTagFilters() {
+    var host = $("tagFilters");
+    host.innerHTML = "";
+
+    // 지금 유형·검색 조건을 통과한 기록들의 태그만 센다 (없는 태그를 보여줘야 소용없다)
+    var count = {};
+    entries.forEach(function (n) {
+      if (filterType !== "all" && n.type !== filterType) return;
+      if (searchQ && entryText(n).indexOf(searchQ.toLowerCase()) < 0) return;
+      (n.tags || []).forEach(function (t) { count[t] = (count[t] || 0) + 1; });
+    });
+    // 고른 태그는 셈에서 빠져도 자리를 지킨다
+    filterTags.forEach(function (t) { if (!(t in count)) count[t] = 0; });
+
+    var names = Object.keys(count).sort(function (a, b) {
+      if (count[b] !== count[a]) return count[b] - count[a];
+      return a.localeCompare(b, "ko");
+    });
+    if (!names.length) { host.style.display = "none"; return; }
+    host.style.display = "";
+
+    host.appendChild(el("span", "flabel", "🏷 태그"));
+
+    var shown = tagsExpanded ? names : names.slice(0, TAGS_SHOWN);
+    shown.forEach(function (t) {
+      var on = filterTags.indexOf(t) >= 0;
+      var b = el("button", "chip tagchip" + (on ? " on" : ""), "#" + t + " " + count[t]);
+      b.type = "button";
+      b.addEventListener("click", function () {
+        if (on) filterTags = filterTags.filter(function (x) { return x !== t; });
+        else filterTags = filterTags.concat([t]);
+        render();
+      });
+      host.appendChild(b);
+    });
+
+    if (names.length > TAGS_SHOWN) {
+      var more = el("button", "chip ghostchip",
+        tagsExpanded ? "접기 ▲" : "더 보기 +" + (names.length - TAGS_SHOWN));
+      more.type = "button";
+      more.addEventListener("click", function () { tagsExpanded = !tagsExpanded; renderTagFilters(); });
+      host.appendChild(more);
+    }
+
+    if (filterTags.length || filterType !== "all" || searchQ) {
+      var clear = el("button", "chip clearchip", "✕ 필터 지우기");
+      clear.type = "button";
+      clear.addEventListener("click", function () {
+        filterTags = []; filterType = "all"; searchQ = ""; $("search").value = "";
+        render();
+      });
+      host.appendChild(clear);
+    }
   }
 
   function entryText(n) {
@@ -2991,6 +3076,12 @@
   }
   function matches(n) {
     if (filterType !== "all" && n.type !== filterType) return false;
+    if (filterTags.length) {
+      var mine = n.tags || [];
+      for (var i = 0; i < filterTags.length; i++) {
+        if (mine.indexOf(filterTags[i]) < 0) return false;
+      }
+    }
     if (!searchQ) return true;
     return entryText(n).indexOf(searchQ.toLowerCase()) >= 0;
   }
@@ -3003,12 +3094,15 @@
     f.setAttribute("referrerpolicy", "no-referrer");
     f.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture; fullscreen";
     f.setAttribute("allowfullscreen", "");
-    f.style.height = (b.height || 360) + "px";
     f.srcdoc = "<!doctype html><meta charset='utf-8'>" +
       "<style>html,body{margin:0;padding:0;background:transparent;font-family:system-ui,sans-serif}" +
       "iframe,img,video{max-width:100%;border:0}*{box-sizing:border-box}</style>" +
       (b.code || "");
-    return f;
+    // 아래 모서리를 끌어 높이를 바꿀 수 있는 상자에 담아 준다
+    var box = el("div", "embedbox");
+    box.style.height = ((b.height || 360) + 15) + "px";
+    box.appendChild(f);
+    return box;
   }
 
   function isVideo(b) { return /^video\//.test(b.mime || ""); }
@@ -3036,7 +3130,9 @@
     return wrap;
   }
 
-  function renderContent(n, host) {
+  function renderContent(n, host, opts) {
+    opts = opts || {};
+    var photosOpenByDefault = !!opts.openPhotos;   // 전체 보기에서는 펼친 채로
     var imgCount = 0;
     var shots = shotsOf(n);
     var shotIndex = 0;
@@ -3052,36 +3148,63 @@
     });
 
     groups.forEach(function (g) {
-      if (g.kind === "images" && g.items.length > 1) {
-        var gal = el("div", "gallery");
-        var SHOWN = 8;
-        g.items.slice(0, SHOWN).forEach(function (b, k) {
-          var at = shotIndex + k;
-          var bt = el("button");
-          bt.type = "button";
-          var im = el("img");
-          im.loading = "lazy";
-          var u = previewUrl(b);
-          if (u) im.src = u;
-          else if (b.fileId && imgCount < THUMB_LIMIT) { imgCount++; loadDriveImage(b.fileId, im); }
-          bt.appendChild(im);
-          if (k === SHOWN - 1 && g.items.length > SHOWN) {
-            bt.appendChild(el("span", "more", "+" + (g.items.length - SHOWN)));
+      // 사진은 카드를 길게 만드는 주범이라 접어 두고, 누르면 편다
+      if (g.kind === "images") {
+        var count = g.items.length;
+        var startAt = shotIndex;
+        var key = n.id + ":" + g.items[0].id;
+        var box = el("div", "photobox");
+        var toggle = el("button", "btn sm photobtn");
+        toggle.type = "button";
+        var body = el("div");
+        function paint() {
+          var open = photosOpenByDefault || photoOpen[key];
+          toggle.textContent = (open ? "▲ 사진 접기" : "▼ 사진 " + count + "장 보기");
+          body.innerHTML = "";
+          body.style.display = open ? "" : "none";
+          if (!open) return;
+          if (count > 1) {
+            var gal = el("div", "gallery");
+            var SHOWN = 8;
+            g.items.slice(0, SHOWN).forEach(function (b, k) {
+              var at = startAt + k;
+              var bt = el("button");
+              bt.type = "button";
+              var im = el("img");
+              im.loading = "lazy";
+              var u = previewUrl(b);
+              if (u) im.src = u;
+              else if (b.fileId && imgCount < THUMB_LIMIT) { imgCount++; loadDriveImage(b.fileId, im); }
+              bt.appendChild(im);
+              if (k === SHOWN - 1 && count > SHOWN) {
+                bt.appendChild(el("span", "more", "+" + (count - SHOWN)));
+              }
+              bt.addEventListener("click", function () { openLightbox(shots, at); });
+              gal.appendChild(bt);
+            });
+            body.appendChild(gal);
+            body.appendChild(el("div", "galcap", "🖼️ 사진 " + count + "장 — 누르면 슬라이드로 넘겨 볼 수 있습니다"));
+          } else {
+            renderOne(g.items[0], startAt, body);
           }
-          bt.addEventListener("click", function () { openLightbox(shots, at); });
-          gal.appendChild(bt);
+        }
+        toggle.addEventListener("click", function () {
+          photoOpen[key] = !(photosOpenByDefault || photoOpen[key]);
+          paint();
         });
-        host.appendChild(gal);
-        host.appendChild(el("div", "galcap", "🖼️ 사진 " + g.items.length + "장 — 누르면 슬라이드로 넘겨 볼 수 있습니다"));
-        shotIndex += g.items.length;
+        paint();
+        box.appendChild(toggle);
+        box.appendChild(body);
+        host.appendChild(box);
+        shotIndex += count;
         return;
       }
-      var b = g.kind === "images" ? g.items[0] : g.block;
-      if (g.kind === "images") { renderOne(b, shotIndex); shotIndex += 1; }
-      else renderOne(b, -1);
+      renderOne(g.block, -1, host);
     });
 
-    function renderOne(b, shotAt) {
+    // where — 이 블록을 붙일 자리. 사진은 접기 상자 안에, 나머지는 본문에 바로 붙는다
+    function renderOne(b, shotAt, where) {
+      var host = where;
       if (b.kind === "text") {
         var p = el("p"); appendRichText(p, b.text); host.appendChild(p);
       } else if (b.kind === "heading") {
@@ -3138,7 +3261,10 @@
         var w2 = el("div"); w2.appendChild(la); host.appendChild(w2);
 
       } else if (b.kind === "embed") {
-        if (b.code && b.code.trim()) host.appendChild(embedFrame(b));
+        if (b.code && b.code.trim()) {
+          host.appendChild(embedFrame(b));
+          host.appendChild(el("div", "embedhint", "↕ 아래 모서리를 끌면 높이를 바꿀 수 있습니다"));
+        }
       }
     }
   }
@@ -3196,7 +3322,7 @@
     paper.appendChild(el("div", "vmeta", metaLine));
 
     var body = el("div", "content");
-    renderContent(n, body);
+    renderContent(n, body, { openPhotos: true });   // 전체 보기에서는 사진도 펼쳐서 보여 준다
     paper.appendChild(body);
 
     // 연결 — 나가는 링크와 들어오는 백링크
@@ -3317,7 +3443,20 @@
 
       if ((n.tags || []).length) {
         var tg = el("div", "tags");
-        n.tags.forEach(function (x) { tg.appendChild(el("span", "tag", "#" + x)); });
+        n.tags.forEach(function (x) {
+          // 태그를 누르면 그 태그로 바로 좁혀 본다
+          var on = filterTags.indexOf(x) >= 0;
+          var chip = el("button", "tag pick" + (on ? " on" : ""), "#" + x);
+          chip.type = "button";
+          chip.title = on ? "이 태그 필터 끄기" : "이 태그만 모아 보기";
+          chip.addEventListener("click", function () {
+            if (on) filterTags = filterTags.filter(function (y) { return y !== x; });
+            else filterTags = filterTags.concat([x]);
+            render();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          });
+          tg.appendChild(chip);
+        });
         card.appendChild(tg);
       }
 
