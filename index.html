@@ -252,6 +252,60 @@
   .graphempty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                 text-align: center; color: var(--ink-soft); font-size: 14px; padding: 30px; }
 
+  /* ---------- 영상·소리 미리보기 ---------- */
+  .media video, .media audio { width: 200px; border-radius: 8px; background: #000; }
+  .media audio { background: transparent; }
+  .content video { max-width: 100%; max-height: 360px; border-radius: 10px; background: #000; display: block; border: 1px solid var(--line); }
+  .content audio { width: 100%; max-width: 420px; display: block; }
+  .driveframe { width: 100%; aspect-ratio: 16/9; border: 1px solid var(--line); border-radius: 10px; background: #000; }
+  .playbtn {
+    display: flex; align-items: center; gap: 10px; width: 100%; max-width: 420px;
+    border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 12px 14px;
+    color: var(--ink); font-size: 13.5px; text-align: left;
+  }
+  .playbtn:hover { border-color: var(--brand); color: var(--brand); }
+  .playbtn .pi { font-size: 26px; line-height: 1; }
+  .playbtn small { display: block; color: var(--ink-soft); font-size: 11.5px; }
+
+  /* ---------- 사진 여러 장 · 슬라이드 ---------- */
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin: 0 0 10px; }
+  .gallery button { padding: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--bg); position: relative; aspect-ratio: 1; }
+  .gallery button:hover { border-color: var(--brand); }
+  .gallery img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gallery .more { position: absolute; inset: 0; background: rgba(15,20,35,.62); color: #fff;
+                   display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px; }
+  .galcap { font-size: 12px; color: var(--ink-soft); margin: -4px 0 10px; }
+
+  .lightbox { position: fixed; inset: 0; z-index: 130; background: rgba(8,10,18,.94);
+              display: flex; flex-direction: column; touch-action: none; }
+  .lb-top { display: flex; align-items: center; gap: 10px; padding: 12px 14px; color: #e8ecf4; font-size: 13.5px; }
+  .lb-top .spacer { flex: 1 1 auto; }
+  .lb-count { font-variant-numeric: tabular-nums; opacity: .8; }
+  .lb-btn { background: rgba(255,255,255,.12); border: none; color: #fff; border-radius: 9px;
+            padding: 8px 12px; font-size: 14px; font-weight: 700; }
+  .lb-btn:hover { background: rgba(255,255,255,.24); }
+  .lb-stage { flex: 1 1 auto; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .lb-stage img { max-width: 94%; max-height: 100%; object-fit: contain; border-radius: 6px; user-select: none; -webkit-user-drag: none; }
+  .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.14);
+            border: none; color: #fff; font-size: 26px; width: 46px; height: 66px; border-radius: 10px; }
+  .lb-nav:hover { background: rgba(255,255,255,.28); }
+  .lb-nav.prev { left: 10px; } .lb-nav.next { right: 10px; }
+  .lb-nav:disabled { opacity: .2; }
+  .lb-cap { padding: 10px 16px 16px; color: #cbd5e1; font-size: 13px; text-align: center; min-height: 20px; }
+  .lb-strip { display: flex; gap: 6px; padding: 0 12px 14px; overflow-x: auto; justify-content: center; }
+  .lb-strip img { width: 54px; height: 54px; object-fit: cover; border-radius: 7px; opacity: .45; cursor: pointer; border: 2px solid transparent; }
+  .lb-strip img.on { opacity: 1; border-color: #7d9dff; }
+  @media (max-width: 700px) { .lb-nav { width: 38px; height: 56px; font-size: 22px; } .lb-strip { display: none; } }
+
+  /* ---------- 웹 클리퍼 ---------- */
+  .bmk {
+    display: inline-block; background: var(--brand); color: #fff; text-decoration: none;
+    padding: 10px 18px; border-radius: 10px; font-weight: 800; font-size: 14.5px;
+    box-shadow: var(--shadow); cursor: grab;
+  }
+  .bmk:hover { background: var(--brand-dark); color: #fff; }
+  .clipnote { font-size: 12.5px; color: var(--ink-soft); }
+
   /* ---------- 보기 방식 전환 ---------- */
   .viewswitch { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
   .vbtn { border: none; background: transparent; color: var(--ink-soft); font-size: 12.5px; font-weight: 700;
@@ -446,6 +500,7 @@
         <button class="btn sm" data-add="capture">📸 화면 캡처</button>
         <button class="btn sm" data-add="file">＋ 파일</button>
         <button class="btn sm" data-add="link">＋ 링크</button>
+        <button class="btn sm" data-add="clip">🌐 웹에서</button>
         <button class="btn sm" data-add="quote">＋ 인용</button>
         <button class="btn sm" data-add="divider">＋ 구분선</button>
         <div class="addhint">파일은 <b>화면 아무 곳에나 끌어다 놓으면</b> 추가됩니다. 글 칸에 이미지 붙여넣기(Ctrl+V)도 됩니다.</div>
@@ -1692,6 +1747,7 @@
     if (kind === "image") { $("imgInput").click(); return; }
     if (kind === "file") { $("fileInput").click(); return; }
     if (kind === "capture") { startCapture(); return; }
+    if (kind === "clip") { openClipDialog(); return; }
     var b = newBlock(kind, data);
     blocks.push(b);
     renderBlocks();
@@ -1793,7 +1849,19 @@
         if (b.kind === "image" && (pv || b.fileId)) {
           var img = el("img", "thumb");
           if (pv) img.src = pv; else loadDriveImage(b.fileId, img);
+          img.style.cursor = "zoom-in";
+          img.addEventListener("click", function () {
+            openLightbox([{ url: pv, fileId: b.fileId, caption: b.caption || "", name: b.original || "" }], 0);
+          });
           m.appendChild(img);
+        } else if (pv && /^video\//.test(b.mime || "")) {
+          var vid = el("video");
+          vid.src = pv; vid.controls = true; vid.preload = "metadata";
+          m.appendChild(vid);
+        } else if (pv && /^audio\//.test(b.mime || "")) {
+          var aud = el("audio");
+          aud.src = pv; aud.controls = true; aud.preload = "metadata";
+          m.appendChild(aud);
         } else {
           m.appendChild(el("div", "ficon", fileIcon(b.mime, b.original)));
         }
@@ -2457,6 +2525,97 @@
       }).catch(function () {});
   }
 
+  /* ---------- 사진 슬라이드로 크게 보기 ---------- */
+  function openLightbox(shots, startAt) {
+    if (!shots.length) return;
+    var i = Math.max(0, Math.min(startAt || 0, shots.length - 1));
+    var box = el("div", "lightbox");
+
+    var top = el("div", "lb-top");
+    var count = el("span", "lb-count");
+    top.appendChild(count);
+    top.appendChild(el("span", "spacer"));
+    var openBtn = el("a", "lb-btn", "드라이브에서 열기");
+    openBtn.target = "_blank"; openBtn.rel = "noopener noreferrer";
+    openBtn.style.textDecoration = "none";
+    top.appendChild(openBtn);
+    var closeBtn = el("button", "lb-btn", "✕ 닫기");
+    top.appendChild(closeBtn);
+    box.appendChild(top);
+
+    var stage = el("div", "lb-stage");
+    var img = el("img");
+    var prev = el("button", "lb-nav prev", "‹");
+    var next = el("button", "lb-nav next", "›");
+    stage.appendChild(prev); stage.appendChild(img); stage.appendChild(next);
+    box.appendChild(stage);
+
+    var cap = el("div", "lb-cap");
+    box.appendChild(cap);
+    var strip = el("div", "lb-strip");
+    box.appendChild(strip);
+
+    shots.forEach(function (s, k) {
+      var th = el("img");
+      th.addEventListener("click", function () { i = k; show(); });
+      strip.appendChild(th);
+      if (s.url) th.src = s.url;
+      else if (s.fileId) loadDriveImage(s.fileId, th);
+    });
+
+    function show() {
+      var s = shots[i];
+      count.textContent = (i + 1) + " / " + shots.length;
+      cap.textContent = [s.caption, s.name].filter(Boolean).join("  ·  ");
+      prev.disabled = i === 0;
+      next.disabled = i === shots.length - 1;
+      img.removeAttribute("src");
+      if (s.url) img.src = s.url;
+      else if (s.fileId) loadDriveImage(s.fileId, img);
+      if (s.fileId) { openBtn.href = driveLink(s.fileId); openBtn.style.display = ""; }
+      else openBtn.style.display = "none";
+      Array.prototype.forEach.call(strip.children, function (t, k) { t.className = (k === i ? "on" : ""); });
+      var on = strip.children[i];
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest", inline: "center" });
+    }
+    function go(d) { var j = i + d; if (j >= 0 && j < shots.length) { i = j; show(); } }
+    function close() {
+      document.removeEventListener("keydown", key);
+      box.remove();
+    }
+    function key(e) {
+      if (e.key === "ArrowRight") { e.preventDefault(); go(1); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); }
+      else if (e.key === "Escape") { e.preventDefault(); close(); }
+    }
+    prev.addEventListener("click", function () { go(-1); });
+    next.addEventListener("click", function () { go(1); });
+    closeBtn.addEventListener("click", close);
+    box.addEventListener("click", function (e) { if (e.target === box || e.target === stage) close(); });
+    document.addEventListener("keydown", key);
+
+    // 손가락으로 넘기기
+    var sx = null;
+    stage.addEventListener("touchstart", function (e) { sx = e.touches[0].clientX; }, { passive: true });
+    stage.addEventListener("touchend", function (e) {
+      if (sx == null) return;
+      var dx = e.changedTouches[0].clientX - sx;
+      if (Math.abs(dx) > 45) go(dx < 0 ? 1 : -1);
+      sx = null;
+    });
+
+    document.body.appendChild(box);
+    show();
+  }
+  // 한 기록 안의 사진들을 슬라이드 목록으로
+  function shotsOf(n) {
+    return (n.blocks || []).filter(function (b) {
+      return b.kind === "image";
+    }).map(function (b) {
+      return { url: previewUrl(b), fileId: b.fileId, caption: b.caption || "", name: b.name || b.original || "" };
+    });
+  }
+
   function renderTypeChips() {
     var host = $("typeChips");
     host.innerHTML = "";
@@ -2500,9 +2659,77 @@
     return entryText(n).indexOf(searchQ.toLowerCase()) >= 0;
   }
 
+  function isVideo(b) { return /^video\//.test(b.mime || ""); }
+  function isAudio(b) { return /^audio\//.test(b.mime || ""); }
+
+  // 드라이브에 올라간 영상은 구글 미리보기 틀로 재생 (통째로 내려받지 않음)
+  function drivePlayer(b) {
+    var wrap = el("div");
+    var btn = el("button", "playbtn");
+    btn.appendChild(el("span", "pi", isAudio(b) ? "🎵" : "▶"));
+    var t = el("span");
+    t.appendChild(document.createTextNode(b.caption || b.name || b.original || "재생"));
+    t.appendChild(el("small", null, humanSize(b.size) + " · 눌러서 재생"));
+    btn.appendChild(t);
+    btn.addEventListener("click", function () {
+      var f = el("iframe", "driveframe");
+      f.src = "https://drive.google.com/file/d/" + b.fileId + "/preview";
+      f.allow = "autoplay";
+      f.setAttribute("allowfullscreen", "");
+      if (isAudio(b)) f.style.aspectRatio = "auto", f.style.height = "70px";
+      wrap.innerHTML = "";
+      wrap.appendChild(f);
+    });
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
   function renderContent(n, host) {
     var imgCount = 0;
-    (n.blocks || []).forEach(function (b) {
+    var shots = shotsOf(n);
+    var shotIndex = 0;
+    var blocks = n.blocks || [];
+
+    // 연달아 놓인 사진은 슬라이드 묶음으로 보여 준다
+    var groups = [], run = null;
+    blocks.forEach(function (b) {
+      if (b.kind === "image") {
+        if (!run) { run = { kind: "images", items: [] }; groups.push(run); }
+        run.items.push(b);
+      } else { run = null; groups.push({ kind: "one", block: b }); }
+    });
+
+    groups.forEach(function (g) {
+      if (g.kind === "images" && g.items.length > 1) {
+        var gal = el("div", "gallery");
+        var SHOWN = 8;
+        g.items.slice(0, SHOWN).forEach(function (b, k) {
+          var at = shotIndex + k;
+          var bt = el("button");
+          bt.type = "button";
+          var im = el("img");
+          im.loading = "lazy";
+          var u = previewUrl(b);
+          if (u) im.src = u;
+          else if (b.fileId && imgCount < THUMB_LIMIT) { imgCount++; loadDriveImage(b.fileId, im); }
+          bt.appendChild(im);
+          if (k === SHOWN - 1 && g.items.length > SHOWN) {
+            bt.appendChild(el("span", "more", "+" + (g.items.length - SHOWN)));
+          }
+          bt.addEventListener("click", function () { openLightbox(shots, at); });
+          gal.appendChild(bt);
+        });
+        host.appendChild(gal);
+        host.appendChild(el("div", "galcap", "🖼️ 사진 " + g.items.length + "장 — 누르면 슬라이드로 넘겨 볼 수 있습니다"));
+        shotIndex += g.items.length;
+        return;
+      }
+      var b = g.kind === "images" ? g.items[0] : g.block;
+      if (g.kind === "images") { renderOne(b, shotIndex); shotIndex += 1; }
+      else renderOne(b, -1);
+    });
+
+    function renderOne(b, shotAt) {
       if (b.kind === "text") {
         var p = el("p"); appendRichText(p, b.text); host.appendChild(p);
       } else if (b.kind === "heading") {
@@ -2516,25 +2743,46 @@
         var img = el("img");
         img.alt = b.caption || b.original || "";
         img.loading = "lazy";
+        img.style.cursor = "zoom-in";
         var pvu = previewUrl(b);
         if (pvu) img.src = pvu;
         else if (b.fileId && imgCount < THUMB_LIMIT) { imgCount++; loadDriveImage(b.fileId, img); }
+        img.addEventListener("click", function () { openLightbox(shots, shotAt < 0 ? 0 : shotAt); });
         fig.appendChild(img);
         var capText = (b.caption || "") + (b.name ? (b.caption ? " · " : "") + b.name : "");
         if (capText) fig.appendChild(el("figcaption", null, capText));
         host.appendChild(fig);
+
+      } else if (b.kind === "file" && (isVideo(b) || isAudio(b))) {
+        // 영상·소리는 바로 재생할 수 있게
+        var pv = previewUrl(b);
+        if (pv) {
+          var media = el(isVideo(b) ? "video" : "audio");
+          media.src = pv;
+          media.controls = true;
+          media.preload = "metadata";
+          var wm = el("div");
+          wm.appendChild(media);
+          var cp = (b.caption || b.name || b.original) + " · " + humanSize(b.size) + " · 업로드 대기";
+          wm.appendChild(el("figcaption", null, cp));
+          host.appendChild(wm);
+        } else if (b.fileId) {
+          host.appendChild(drivePlayer(b));
+        }
+
       } else if (b.kind === "file") {
         var a = el("a", "fileline", fileIcon(b.mime, b.name) + " " + (b.caption || b.name || b.original) +
           (b.fileId ? "" : " · 업로드 대기"));
         if (b.fileId) { a.href = driveLink(b.fileId); a.target = "_blank"; a.rel = "noopener noreferrer"; }
         else a.href = "javascript:void(0)";
         var w1 = el("div"); w1.appendChild(a); host.appendChild(w1);
+
       } else if (b.kind === "link") {
         var la = el("a", "linkline", "🔗 " + (b.label || b.url));
         la.href = b.url; la.target = "_blank"; la.rel = "noopener noreferrer";
         var w2 = el("div"); w2.appendChild(la); host.appendChild(w2);
       }
-    });
+    }
   }
 
   function renderViewSwitch() {
@@ -2732,6 +2980,145 @@
   function closeModal() {
     if (modalCleanup) { try { modalCleanup(); } catch (e) {} modalCleanup = null; }
     if (modalEl) { modalEl.remove(); modalEl = null; }
+  }
+
+  /* =========================================================
+     11-9. 웹 클리퍼 — 웹에서 본 것을 그대로 담아오기
+     ========================================================= */
+  function appUrl() { return location.origin + location.pathname; }
+  function bookmarkletCode() {
+    return "javascript:(function(){" +
+      "var s=(window.getSelection?String(window.getSelection()):'')||'';" +
+      "function m(n){var e=document.querySelector('meta[property=\"'+n+'\"],meta[name=\"'+n+'\"]');return e?e.content:'';}" +
+      "var o={t:document.title,u:location.href,s:s.slice(0,5000),d:m('og:description')||m('description'),i:m('og:image')};" +
+      "var q=encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(o)))));" +
+      "window.open('" + appUrl() + "#clip='+q,'_blank');" +
+      "})()";
+  }
+  function hostOf(u) {
+    try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
+  }
+  // 주소창 #clip=... 을 읽어 작성 화면에 채워 넣는다
+  function consumeClipHash() {
+    var m = /[#&]clip=([^&]+)/.exec(location.hash || "");
+    if (!m) return false;
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+    var data;
+    try { data = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); }
+    catch (e) { toast("클리핑 내용을 읽지 못했습니다."); return false; }
+    fillFromClip(data);
+    return true;
+  }
+  function fillFromClip(d) {
+    resetComposer();
+    // '자료' 유형이 있으면 그걸로
+    settings.types.forEach(function (t) { if (t.label === "자료" || t.key === "material") currentType = t.key; });
+    $("title").value = (d.t || "").slice(0, 120);
+    var h = hostOf(d.u || "");
+    if (h) $("tags").value = h;
+    blocks = [];
+    if (d.u) blocks.push(newBlock("link", { url: d.u, label: d.t || h }));
+    if (d.s && d.s.trim()) blocks.push(newBlock("quote", { text: d.s.trim() }));
+    else if (d.d && d.d.trim()) blocks.push(newBlock("quote", { text: d.d.trim() }));
+    blocks.push(newBlock("text", { text: "" }));
+    renderTypeChips(); renderBlocks();
+    $("composerTitle").textContent = "🌐 웹에서 가져온 기록";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    var note = d.s ? "선택한 글까지" : "제목과 주소를";
+    toast(note + " 가져왔습니다. 메모를 덧붙여 저장하세요.");
+    if (d.i) toast2("대표 이미지가 있습니다 — 필요하면 그 페이지에서 복사해 Ctrl+V 하세요.");
+  }
+  var toast2 = function (msg) { setTimeout(function () { toast(msg); }, 3000); };
+
+  // 주소를 직접 붙여넣어 담기
+  function openClipDialog() {
+    closeModal();
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "560px";
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "🌐 웹에서 가져오기"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody");
+
+    var f1 = el("div", "field");
+    f1.appendChild(el("label", null, "주소(URL)"));
+    var uin = el("input", "inp"); uin.placeholder = "https://…";
+    f1.appendChild(uin);
+    body.appendChild(f1);
+
+    var f2 = el("div", "field");
+    f2.appendChild(el("label", null, "제목 (비우면 주소로)"));
+    var tin = el("input", "inp"); tin.placeholder = "이 자료의 제목";
+    f2.appendChild(tin);
+    body.appendChild(f2);
+
+    var f3 = el("div", "field");
+    f3.appendChild(el("label", null, "옮겨 적을 부분 (선택)"));
+    var qin = el("textarea", "inp"); qin.rows = 5;
+    qin.placeholder = "웹에서 복사한 문단을 붙여넣으세요. 인용 블록으로 들어갑니다.";
+    f3.appendChild(qin);
+    body.appendChild(f3);
+
+    body.appendChild(el("p", "clipnote",
+      "브라우저 보안 때문에 앱이 다른 사이트 내용을 대신 읽어올 수는 없습니다. " +
+      "그래서 두 가지 방법을 씁니다 — 여기에 직접 붙여넣거나, 아래 «웹 클리퍼» 를 북마크바에 넣어 두고 한 번에 담아오거나."));
+
+    var f4 = el("div", "field");
+    f4.style.borderTop = "1px solid var(--line)";
+    f4.style.paddingTop = "14px";
+    f4.appendChild(el("label", null, "🔖 웹 클리퍼 — 한 번만 설치하면 어느 사이트에서든"));
+    var bmk = el("a", "bmk", "📋 웹 클리퍼");
+    bmk.href = bookmarkletCode();
+    bmk.draggable = true;
+    bmk.addEventListener("click", function (e) { e.preventDefault(); toast("이 버튼은 눌러서 쓰는 게 아니라, 북마크바로 끌어다 놓는 것입니다."); });
+    f4.appendChild(bmk);
+    var steps = el("ol", "steps");
+    ["위 파란 버튼을 브라우저 북마크바로 끌어다 놓습니다. (Ctrl+Shift+B 로 북마크바 표시)",
+     "담고 싶은 웹페이지에서 필요한 부분을 마우스로 선택합니다. (선택 안 해도 됩니다)",
+     "북마크바의 «웹 클리퍼» 를 누르면, 이 앱이 새 탭에 열리면서 제목·주소·선택한 글이 채워집니다.",
+     "메모를 덧붙이고 저장하면 끝입니다."
+    ].forEach(function (s) { steps.appendChild(el("li", null, s)); });
+    f4.appendChild(steps);
+    var copyBtn = el("button", "btn sm", "북마클릿 주소 복사");
+    copyBtn.style.marginTop = "8px";
+    copyBtn.addEventListener("click", function () {
+      var code = bookmarkletCode();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(function () { toast("복사했습니다. 북마크를 새로 만들고 주소 칸에 붙여넣으세요."); },
+          function () { window.prompt("아래를 복사해 북마크 주소로 쓰세요", code); });
+      } else window.prompt("아래를 복사해 북마크 주소로 쓰세요", code);
+    });
+    f4.appendChild(copyBtn);
+    if (/^http:\/\/localhost/.test(appUrl())) {
+      f4.appendChild(el("p", "clipnote", "⚠️ 지금은 localhost 주소로 만들어집니다. 배포한 주소에서 다시 설치하세요."));
+    }
+    body.appendChild(f4);
+    m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    foot.appendChild(el("span", "spacer"));
+    var cancel = el("button", "btn", "취소");
+    cancel.addEventListener("click", closeModal);
+    var ok = el("button", "btn primary", "가져오기");
+    ok.addEventListener("click", function () {
+      var u = uin.value.trim();
+      if (!u) { toast("주소를 넣어 주세요."); return; }
+      if (!/^https?:\/\//i.test(u)) u = "https://" + u.replace(/^\/+/, "");
+      closeModal();
+      fillFromClip({ t: tin.value.trim() || hostOf(u) || u, u: u, s: qin.value.trim() });
+    });
+    foot.appendChild(cancel); foot.appendChild(ok);
+    m.appendChild(foot);
+
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+    setTimeout(function () { uin.focus(); }, 30);
   }
 
   /* =========================================================
@@ -3915,6 +4302,8 @@
   render();
   updateChrome();
   rehydratePending();   // 지난번에 못 올린 사진·파일 되살리기
+  consumeClipHash();    // 웹 클리퍼로 넘어온 내용이 있으면 채워 넣기
+  window.addEventListener("hashchange", consumeClipHash);
 
   // 기기에 맞는 버튼 이름
   (function () {
