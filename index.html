@@ -351,6 +351,21 @@
   .block.embed textarea { font-size: 12.5px; }
 
 
+  /* ---------- 엮어내기 (고른 기록 → 한 권) ---------- */
+  .picklist { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  .pickrow { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-bottom: 1px solid var(--line-soft);
+             font-size: 13.5px; cursor: pointer; }
+  .pickrow:last-child { border-bottom: none; }
+  .pickrow:hover { background: var(--panel); }
+  .pickrow input { width: 17px; height: 17px; flex: 0 0 auto; }
+  .pickrow .pico { flex: 0 0 auto; }
+  .pickrow .pttl { flex: 1 1 auto; min-width: 0; font-weight: 600;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pickrow .pmeta { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-soft); }
+  .optrow { display: flex; align-items: flex-start; gap: 9px; padding: 7px 2px; cursor: pointer; font-size: 13.5px; }
+  .optrow input { width: 17px; height: 17px; margin-top: 2px; flex: 0 0 auto; }
+  .optrow small { display: block; color: var(--ink-soft); font-size: 12px; font-weight: 400; margin-top: 1px; }
+
   /* ---------- 링크 미리보기 ---------- */
   .linkcard { display: flex; gap: 10px; align-items: center; max-width: 100%;
               border: 1px solid var(--line); border-radius: 11px; padding: 8px 11px;
@@ -633,6 +648,7 @@
     <span class="count" id="countText"></span>
     <span class="spacer"></span>
     <div class="viewswitch" id="viewSwitch"></div>
+    <button id="btnCompile" class="btn sm" title="고른 기록을 한 권으로 묶어 내려받습니다">📚 엮어내기</button>
     <input id="search" class="inp search" placeholder="제목·내용·태그 검색" />
   </div>
   <div class="chips filters" id="typeFilters"></div>
@@ -1505,6 +1521,42 @@
   }
   function driveLink(id) { return "https://drive.google.com/file/d/" + id + "/view"; }
 
+  /* 블록 → 마크다운 본문 줄들. h 는 소제목 단계(2 = "##").
+     기록 한 편을 그대로 뽑을 때와, 여러 편을 한 권으로 엮을 때 같이 쓴다. */
+  function blocksToMarkdown(n, h) {
+    var hh = new Array((h || 2) + 1).join("#");
+    var L = [];
+    (n.blocks || []).forEach(function (b) {
+      if (b.kind === "text") {
+        if (b.text && b.text.trim()) { L.push(b.text.trim()); L.push(""); }
+      } else if (b.kind === "heading") {
+        if (b.text && b.text.trim()) { L.push(hh + " " + b.text.trim()); L.push(""); }
+      } else if (b.kind === "quote") {
+        if (b.text && b.text.trim()) {
+          b.text.trim().split("\n").forEach(function (line) { L.push("> " + line); });
+          L.push("");
+        }
+      } else if (b.kind === "divider") {
+        L.push("---"); L.push("");
+      } else if (b.kind === "image") {
+        L.push("![" + (b.caption || b.original || "") + "](" + mediaPath(b) + ")");
+        if (b.caption) L.push("*" + b.caption + "*");
+        if (b.fileId) L.push("<!-- drive: " + driveLink(b.fileId) + " -->");
+        L.push("");
+      } else if (b.kind === "file") {
+        var line = "📎 [" + (b.caption || b.name || b.original) + "](" + (b.fileId ? driveLink(b.fileId) : mediaPath(b)) + ")";
+        if (b.original && b.name && b.original !== b.name) line += " <!-- 원본: " + b.original + " -->";
+        L.push(line); L.push("");
+      } else if (b.kind === "link") {
+        if (b.url) { L.push("🔗 [" + (b.label || b.url) + "](" + b.url + ")"); L.push(""); }
+      } else if (b.kind === "embed") {
+        // 마크다운은 HTML 을 그대로 품는다 (옵시디언에서도 보임)
+        if (b.code && b.code.trim()) { L.push(b.code.trim()); L.push(""); }
+      }
+    });
+    return L;
+  }
+
   function buildMarkdown(n) {
     var media = (n.blocks || []).filter(function (b) { return b.kind === "image" || b.kind === "file"; });
     var links = (n.blocks || []).filter(function (b) { return b.kind === "link"; });
@@ -1536,34 +1588,7 @@
     L.push("# " + (n.title || "(제목 없음)"));
     L.push("");
 
-    (n.blocks || []).forEach(function (b) {
-      if (b.kind === "text") {
-        if (b.text && b.text.trim()) { L.push(b.text.trim()); L.push(""); }
-      } else if (b.kind === "heading") {
-        if (b.text && b.text.trim()) { L.push("## " + b.text.trim()); L.push(""); }
-      } else if (b.kind === "quote") {
-        if (b.text && b.text.trim()) {
-          b.text.trim().split("\n").forEach(function (line) { L.push("> " + line); });
-          L.push("");
-        }
-      } else if (b.kind === "divider") {
-        L.push("---"); L.push("");
-      } else if (b.kind === "image") {
-        L.push("![" + (b.caption || b.original || "") + "](" + mediaPath(b) + ")");
-        if (b.caption) L.push("*" + b.caption + "*");
-        if (b.fileId) L.push("<!-- drive: " + driveLink(b.fileId) + " -->");
-        L.push("");
-      } else if (b.kind === "file") {
-        var line = "📎 [" + (b.caption || b.name || b.original) + "](" + (b.fileId ? driveLink(b.fileId) : mediaPath(b)) + ")";
-        if (b.original && b.name && b.original !== b.name) line += " <!-- 원본: " + b.original + " -->";
-        L.push(line); L.push("");
-      } else if (b.kind === "link") {
-        if (b.url) { L.push("🔗 [" + (b.label || b.url) + "](" + b.url + ")"); L.push(""); }
-      } else if (b.kind === "embed") {
-        // 마크다운은 HTML 을 그대로 품는다 (옵시디언에서도 보임)
-        if (b.code && b.code.trim()) { L.push(b.code.trim()); L.push(""); }
-      }
-    });
+    blocksToMarkdown(n, 2).forEach(function (line) { L.push(line); });
 
     // 관계망에서 이어준 연결 — 옵시디언에서도 링크로 읽힌다
     var rels = (n.relations || []).map(function (r) {
@@ -1590,22 +1615,17 @@
       return (b && b.trim()) ? b.trim() : a.trim();
     });
   }
-  function buildHtml(n) {
-    var t = typeOf(n.type);
+  /* 블록 → HTML 조각들. h 는 소제목 단계(2 = h2). 한 편 뽑기와 엮어내기에서 같이 쓴다. */
+  function blocksToHtml(n, h) {
+    var hn = "h" + (h || 2);
     var H = [];
-    H.push('<h1>' + esc(n.title || "(제목 없음)") + '</h1>');
-    var meta = [t.icon + " " + t.label, formatDate(n.createdAt)];
-    if ((n.tags || []).length) meta.push(n.tags.map(function (x) { return "#" + x; }).join(" "));
-    H.push('<p><i>' + esc(meta.join("  ·  ")) + '</i></p>');
-    H.push("<hr />");
-
     (n.blocks || []).forEach(function (b) {
       if (b.kind === "text") {
         plainLinks(b.text).split(/\n{2,}/).forEach(function (para) {
           if (para.trim()) H.push("<p>" + esc(para).replace(/\n/g, "<br />") + "</p>");
         });
       } else if (b.kind === "heading") {
-        if (b.text) H.push("<h2>" + esc(plainLinks(b.text)) + "</h2>");
+        if (b.text) H.push("<" + hn + ">" + esc(plainLinks(b.text)) + "</" + hn + ">");
       } else if (b.kind === "quote") {
         if (b.text) H.push('<blockquote><p>' + esc(plainLinks(b.text)).replace(/\n/g, "<br />") + "</p></blockquote>");
       } else if (b.kind === "divider") {
@@ -1626,6 +1646,19 @@
         if (b.code && b.code.trim()) H.push(b.code.trim());
       }
     });
+    return H;
+  }
+
+  function buildHtml(n) {
+    var t = typeOf(n.type);
+    var H = [];
+    H.push('<h1>' + esc(n.title || "(제목 없음)") + '</h1>');
+    var meta = [t.icon + " " + t.label, formatDate(n.createdAt)];
+    if ((n.tags || []).length) meta.push(n.tags.map(function (x) { return "#" + x; }).join(" "));
+    H.push('<p><i>' + esc(meta.join("  ·  ")) + '</i></p>');
+    H.push("<hr />");
+
+    blocksToHtml(n, 2).forEach(function (x) { H.push(x); });
 
     var rels = (n.relations || []).map(function (r) {
       var tt = null;
@@ -1640,7 +1673,8 @@
     return htmlPage(esc(n.title || "(제목 없음)"), H.join("\n"));
   }
   // 브라우저로 바로 열어 읽을 수 있게 서식을 입힌 한 장짜리 HTML
-  function htmlPage(titleEsc, inner) {
+  // book = true 면 여러 편을 엮은 «책» 서식(표지·목차·장)이 더 붙는다
+  function htmlPage(titleEsc, inner, book) {
     var css = [
       ":root{--ink:#1c2333;--soft:#5b6479;--line:#e3e7ef;--brand:#3f5bd9;--bg:#f6f7fb}",
       "*{box-sizing:border-box}",
@@ -1664,9 +1698,27 @@
       "@media(max-width:700px){body{padding:14px 10px 48px}main{padding:22px 18px;border-radius:12px}h1{font-size:22px}}",
       "@media print{body{background:#fff;padding:0}main{max-width:none;border:none;border-radius:0;box-shadow:none;padding:0}}"
     ].join("");
+    var bookCss = !book ? "" : [
+      "h1.booktitle{font-size:34px;margin:8px 0 6px;line-height:1.3}",
+      "p.booksub{color:var(--soft);font-size:14px;margin:0 0 26px;padding-bottom:22px;border-bottom:2px solid var(--line)}",
+      "nav.toc{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:0 0 34px}",
+      "nav.toc h2{margin:0 0 10px;font-size:17px}",
+      "nav.toc ol{margin:0;padding-left:20px}",
+      "nav.toc li{margin:6px 0}",
+      "nav.toc a{font-weight:600}",
+      "nav.toc .tocmeta{display:block;font-size:12px;color:var(--soft);border:0}",
+      "section.chapter{margin:0 0 10px;padding:26px 0 6px;border-top:1px solid var(--line)}",
+      "section.chapter:first-of-type{border-top:0}",
+      "section.chapter h2{font-size:23px;margin:0 0 6px}",
+      "p.chmeta{color:var(--soft);font-size:13px;margin:0 0 16px}",
+      ".chlinks{margin:18px 0 0;padding:11px 14px;background:var(--bg);border-radius:10px;font-size:13.5px;color:#333c52}",
+      "@media print{section.chapter{break-before:page;page-break-before:always}",
+      "section.chapter:first-of-type{break-before:auto;page-break-before:auto}",
+      "nav.toc{break-after:page;page-break-after:always}}"
+    ].join("");
     return '<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8" />\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1" />\n' +
-      "<title>" + titleEsc + "</title>\n<style>" + css + "</style>\n</head>\n<body>\n<main>\n" +
+      "<title>" + titleEsc + "</title>\n<style>" + css + bookCss + "</style>\n</head>\n<body>\n<main>\n" +
       inner + "\n</main>\n</body>\n</html>";
   }
   // 구글 문서로 변환 저장 (mimeType 은 문서, 올리는 본문은 HTML)
@@ -3492,6 +3544,305 @@
     scroll.scrollTop = 0;
   }
 
+  /* =========================================================
+     10-2. 엮어내기 — 고른 기록들을 한 권으로 묶어 내려받기
+     ========================================================= */
+  function downloadText(filename, mime, text) {
+    var blob = new Blob([text], { type: mime + ";charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1500);
+  }
+
+  // 고른 기록에서 연결(글 속 [[링크]] · 관계망 · 백링크)을 따라 한 단계 넓힌다
+  function widenByLinks(ids, depth) {
+    var have = {}, order = [];
+    ids.forEach(function (id) { if (!have[id]) { have[id] = 1; order.push(id); } });
+    var byId = {};
+    entries.forEach(function (n) { byId[n.id] = n; });
+    for (var d = 0; d < (depth || 1); d++) {
+      var wave = order.slice();
+      wave.forEach(function (id) {
+        var n = byId[id];
+        if (!n) return;
+        outLinks(n).forEach(function (l) { if (l.to && !have[l.to]) { have[l.to] = 1; order.push(l.to); } });
+        backLinks(n).forEach(function (b) { if (!have[b.entry.id]) { have[b.entry.id] = 1; order.push(b.entry.id); } });
+      });
+    }
+    return order.map(function (id) { return byId[id]; }).filter(Boolean);
+  }
+
+  function sortForBook(list, how) {
+    var arr = list.slice();
+    if (how === "old") arr.sort(function (a, b) { return (a.createdAt || "") < (b.createdAt || "") ? -1 : 1; });
+    else if (how === "new") arr.sort(function (a, b) { return (a.createdAt || "") > (b.createdAt || "") ? -1 : 1; });
+    else if (how === "title") arr.sort(function (a, b) { return String(a.title || "").localeCompare(String(b.title || ""), "ko"); });
+    return arr;
+  }
+
+  // 저장된 시각은 UTC 라, 날짜만 뽑을 때는 «보는 사람 기준»으로 바꿔야 하루가 어긋나지 않는다
+  function localDay(ts) {
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return "";
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+
+  function bookRange(list) {
+    var ds = list.map(function (n) { return localDay(n.createdAt); }).filter(Boolean).sort();
+    if (!ds.length) return "";
+    return ds[0] === ds[ds.length - 1] ? ds[0] : (ds[0] + " ~ " + ds[ds.length - 1]);
+  }
+
+  // 제목을 앵커(#링크)로 — 한글도 그대로 쓰되 공백만 -
+  function anchorOf(i, title) {
+    return "ch" + i + "-" + String(title || "").trim().toLowerCase().replace(/[^\w가-힣]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  }
+
+  function compileMarkdown(list, o) {
+    var L = [];
+    L.push("# " + (o.title || "기록 모음"));
+    L.push("");
+    var sub = ["기록 " + list.length + "편"];
+    var range = bookRange(list); if (range) sub.push(range);
+    sub.push("PKEMS 로 엮음 · " + dateStamp());
+    L.push("> " + sub.join(" · "));
+    L.push("");
+
+    if (o.toc) {
+      L.push("## 목차");
+      L.push("");
+      list.forEach(function (n, i) {
+        var t = typeOf(n.type);
+        L.push((i + 1) + ". [" + (n.title || "(제목 없음)") + "](#" + anchorOf(i + 1, n.title) + ")"
+          + "  — " + t.icon + " " + t.label + " · " + localDay(n.createdAt));
+      });
+      L.push("");
+    }
+
+    list.forEach(function (n, i) {
+      var t = typeOf(n.type);
+      L.push("");
+      L.push("---");
+      L.push("");
+      L.push('<a id="' + anchorOf(i + 1, n.title) + '"></a>');
+      L.push("");
+      L.push("## " + (i + 1) + ". " + (n.title || "(제목 없음)"));
+      L.push("");
+      var meta = [t.icon + " " + t.label, formatDate(n.createdAt)];
+      if ((n.tags || []).length) meta.push(n.tags.map(function (x) { return "#" + x; }).join(" "));
+      L.push("*" + meta.join("  ·  ") + "*");
+      L.push("");
+      blocksToMarkdown(n, 3).forEach(function (line) { L.push(line); });
+
+      if (o.links) {
+        var outs = outLinks(n).filter(function (l) { return l.to; });
+        var ins = backLinks(n);
+        if (outs.length || ins.length) {
+          L.push("");
+          L.push("> **🔗 연결**  ");
+          if (outs.length) L.push("> 나감 — " + outs.map(function (l) { return "[[" + l.title + "]]" + (l.label ? "(" + l.label + ")" : ""); }).join(", ") + "  ");
+          if (ins.length) L.push("> 들어옴 — " + ins.map(function (b) { return "[[" + b.entry.title + "]]"; }).join(", "));
+          L.push("");
+        }
+      }
+    });
+    return L.join("\n").replace(/\n{4,}/g, "\n\n\n");
+  }
+
+  function compileHtml(list, o) {
+    var H = [];
+    H.push('<h1 class="booktitle">' + esc(o.title || "기록 모음") + "</h1>");
+    var sub = ["기록 " + list.length + "편"];
+    var range = bookRange(list); if (range) sub.push(range);
+    sub.push("PKEMS 로 엮음 · " + dateStamp());
+    H.push('<p class="booksub">' + esc(sub.join("  ·  ")) + "</p>");
+
+    if (o.toc) {
+      H.push('<nav class="toc"><h2>목차</h2><ol>');
+      list.forEach(function (n, i) {
+        var t = typeOf(n.type);
+        H.push('<li><a href="#' + anchorOf(i + 1, n.title) + '">' + esc(n.title || "(제목 없음)") + "</a>"
+          + '<span class="tocmeta">' + esc(t.icon + " " + t.label + " · " + localDay(n.createdAt)) + "</span></li>");
+      });
+      H.push("</ol></nav>");
+    }
+
+    list.forEach(function (n, i) {
+      var t = typeOf(n.type);
+      H.push('<section class="chapter" id="' + anchorOf(i + 1, n.title) + '">');
+      H.push("<h2>" + (i + 1) + ". " + esc(n.title || "(제목 없음)") + "</h2>");
+      var meta = [t.icon + " " + t.label, formatDate(n.createdAt)];
+      if ((n.tags || []).length) meta.push(n.tags.map(function (x) { return "#" + x; }).join(" "));
+      H.push('<p class="chmeta">' + esc(meta.join("  ·  ")) + "</p>");
+      blocksToHtml(n, 3).forEach(function (x) { H.push(x); });
+
+      if (o.links) {
+        var outs = outLinks(n).filter(function (l) { return l.to; });
+        var ins = backLinks(n);
+        if (outs.length || ins.length) {
+          var idx = {};
+          list.forEach(function (m, k) { idx[m.id] = k + 1; });
+          var one = function (title, id) {
+            return idx[id] ? '<a href="#' + anchorOf(idx[id], title) + '">' + esc(title) + "</a>" : esc(title);
+          };
+          H.push('<div class="chlinks"><b>🔗 연결</b><br />');
+          if (outs.length) H.push("나감 — " + outs.map(function (l) { return one(l.title, l.to); }).join(", ") + "<br />");
+          if (ins.length) H.push("들어옴 — " + ins.map(function (b) { return one(b.entry.title, b.entry.id); }).join(", "));
+          H.push("</div>");
+        }
+      }
+      H.push("</section>");
+    });
+    return htmlPage(esc(o.title || "기록 모음"), H.join("\n"), true);
+  }
+
+  function openCompile() {
+    closeModal();
+    var pool = entries.filter(matches);            // 지금 필터를 통과한 것에서 고른다
+    if (!pool.length) { toast("엮을 기록이 없습니다."); return; }
+
+    var picked = {};
+    pool.forEach(function (n) { picked[n.id] = true; });
+
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "680px";
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "📚 엮어내기 — 골라서 한 권으로"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody");
+    body.appendChild(el("p", "desc",
+      "고른 기록을 하나의 파일로 묶습니다. 목차·연결까지 담기므로 연수 자료나 산출물로 그대로 쓸 수 있습니다."));
+
+    var f1 = el("div", "field");
+    f1.appendChild(el("label", null, "책 제목"));
+    var tin = el("input", "inp");
+    tin.value = (filterTags.length ? filterTags.map(function (t) { return "#" + t; }).join(" ") + " 모음"
+      : (folder.name || "기록") + " 모음");
+    f1.appendChild(tin);
+    body.appendChild(f1);
+
+    // 고르기
+    var f2 = el("div", "field");
+    var lab = el("label", null, "담을 기록");
+    f2.appendChild(lab);
+    var tools = el("div", "row"); tools.style.marginBottom = "6px";
+    var allBtn = el("button", "btn sm", "전체 선택"); allBtn.type = "button";
+    var noneBtn = el("button", "btn sm", "전체 해제"); noneBtn.type = "button";
+    var cnt = el("span", "desc"); cnt.style.margin = "0";
+    tools.appendChild(allBtn); tools.appendChild(noneBtn); tools.appendChild(cnt);
+    f2.appendChild(tools);
+
+    var listBox = el("div", "picklist");
+    pool.forEach(function (n) {
+      var t = typeOf(n.type);
+      var row = el("label", "pickrow");
+      var cb = el("input"); cb.type = "checkbox"; cb.checked = true;
+      cb.addEventListener("change", function () { picked[n.id] = cb.checked; paintCount(); });
+      row.appendChild(cb);
+      row.appendChild(el("span", "pico", t.icon));
+      row.appendChild(el("span", "pttl", n.title || "(제목 없음)"));
+      var links = outLinks(n).filter(function (l) { return l.to; }).length + backLinks(n).length;
+      if (links) row.appendChild(el("span", "pmeta", "🔗 " + links));
+      row.appendChild(el("span", "pmeta", (n.createdAt || "").slice(0, 10)));
+      row.__cb = cb; row.__id = n.id;
+      listBox.appendChild(row);
+    });
+    f2.appendChild(listBox);
+    body.appendChild(f2);
+
+    // 옵션
+    var f3 = el("div", "field");
+    f3.appendChild(el("label", null, "묶는 방법"));
+    function optRow(checked, text, hint) {
+      var r = el("label", "optrow");
+      var c = el("input"); c.type = "checkbox"; c.checked = checked;
+      r.appendChild(c);
+      var w = el("span");
+      w.appendChild(el("b", null, text));
+      if (hint) w.appendChild(el("small", null, hint));
+      r.appendChild(w);
+      f3.appendChild(r);
+      return c;
+    }
+    var cWiden = optRow(false, "연결된 기록도 함께 담기",
+      "고른 기록에서 [[링크]]·관계망·백링크로 이어진 기록을 한 단계 더 넣습니다");
+    var cToc = optRow(true, "목차 넣기", "번호를 눌러 그 자리로 바로 갑니다");
+    var cLinks = optRow(true, "연결 정보 함께 적기", "각 편 끝에 «나감 / 들어옴» 을 적습니다");
+
+    var r4 = el("div", "row"); r4.style.marginTop = "8px";
+    r4.appendChild(el("span", "desc", "순서"));
+    var sel = el("select", "inp"); sel.style.width = "auto";
+    [["old", "오래된 것부터 (시간 순)"], ["new", "최근 것부터"], ["title", "제목 순"]].forEach(function (o) {
+      var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; sel.appendChild(op);
+    });
+    r4.appendChild(sel);
+    f3.appendChild(r4);
+    body.appendChild(f3);
+    m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    var status = el("span", "desc"); status.style.margin = "0";
+    foot.appendChild(status);
+    foot.appendChild(el("span", "spacer"));
+    var mdBtn = el("button", "btn", "⬇ .md");
+    var htmlBtn = el("button", "btn primary", "⬇ .html");
+    foot.appendChild(mdBtn); foot.appendChild(htmlBtn);
+    m.appendChild(foot);
+
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+
+    function paintCount() {
+      var k = pool.filter(function (n) { return picked[n.id]; }).length;
+      cnt.textContent = k + " / " + pool.length + " 편 선택";
+    }
+    allBtn.addEventListener("click", function () {
+      pool.forEach(function (n) { picked[n.id] = true; });
+      Array.prototype.forEach.call(listBox.children, function (r) { r.__cb.checked = true; });
+      paintCount();
+    });
+    noneBtn.addEventListener("click", function () {
+      pool.forEach(function (n) { picked[n.id] = false; });
+      Array.prototype.forEach.call(listBox.children, function (r) { r.__cb.checked = false; });
+      paintCount();
+    });
+    paintCount();
+
+    function gather() {
+      var ids = pool.filter(function (n) { return picked[n.id]; }).map(function (n) { return n.id; });
+      if (!ids.length) { toast("담을 기록을 하나 이상 골라 주세요."); return null; }
+      var list = cWiden.checked ? widenByLinks(ids, 1)
+        : ids.map(function (id) { return entries.filter(function (n) { return n.id === id; })[0]; }).filter(Boolean);
+      return {
+        list: sortForBook(list, sel.value),
+        opt: { title: tin.value.trim() || "기록 모음", toc: cToc.checked, links: cLinks.checked }
+      };
+    }
+    function fileStem(o, list) {
+      return safeName(o.title, 60) + "_" + list.length + "편_" + dateStamp();
+    }
+
+    mdBtn.addEventListener("click", function () {
+      var g = gather(); if (!g) return;
+      downloadText(fileStem(g.opt, g.list) + ".md", "text/markdown", compileMarkdown(g.list, g.opt));
+      status.textContent = g.list.length + "편을 .md 로 내려받았습니다.";
+    });
+    htmlBtn.addEventListener("click", function () {
+      var g = gather(); if (!g) return;
+      downloadText(fileStem(g.opt, g.list) + ".html", "text/html", compileHtml(g.list, g.opt));
+      status.textContent = g.list.length + "편을 .html 로 내려받았습니다.";
+    });
+  }
+
   function renderViewSwitch() {
     var host = $("viewSwitch");
     host.innerHTML = "";
@@ -5105,6 +5456,7 @@
   $("btnSave").addEventListener("click", saveEntry);
   $("btnCancelEdit").addEventListener("click", function () { clearDraft(true); resetComposer(); });
   $("search").addEventListener("input", function () { searchQ = this.value.trim(); render(); });
+  $("btnCompile").addEventListener("click", openCompile);
   document.addEventListener("keydown", function (e) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); saveEntry(); }
     if (e.key === "Escape" && document.querySelector(".lightbox")) return;  // 사진 창이 먼저 닫힌다
