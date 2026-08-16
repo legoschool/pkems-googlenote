@@ -343,6 +343,10 @@
               border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
   .embedbox > iframe.embedframe { width: 100%; height: 100%; border: none; border-radius: 10px 10px 0 0; display: block; }
   .embedhint { font-size: 11.5px; color: var(--ink-soft); margin: -2px 0 10px; }
+  /* 보드(카드)에서는 삽입한 페이지가 미리보기를 다 차지하지 않게 줄여 둔다.
+     원래 크기로 보려면 「전체 보기」에서. */
+  #list .entry .content .embedbox { max-height: 170px; }
+  #list .entry .content .embedhint { display: none; }
   .embedframe { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); display: block; }
   .block.embed textarea { font-size: 12.5px; }
 
