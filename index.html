@@ -507,7 +507,8 @@
 
   var INDEX_NAME = "PKEMS-index.json";
   var SETTINGS_NAME = "PKEMS-settings.json";
-  var MAX_FILE_MB = 20;
+  var MAX_FILE_MB = 200;
+  var RESUMABLE_CHUNK = 8 * 1024 * 1024;   // 8MB 씩 끊어서 올린다
   var THUMB_LIMIT = 6; // 카드 한 장에 미리 불러올 이미지 수
 
   var DEFAULTS = {
@@ -526,6 +527,8 @@
     folderPattern: "{날짜}_{유형}_{제목}",
     materialsFolderName: "자료",
     viewMode: "stream",   // stream(나열) | grid(바둑판) | list(목록)
+    alsoGdoc: true,       // 구글 문서로도 저장 (드라이브에서 바로 읽기 좋음)
+    alsoHtml: false,      // HTML 파일로도 저장
     useSubfolder: false,  // 구버전 설정 호환용
     subfolderName: "자료"
   };
@@ -696,6 +699,8 @@
       if (s.subfolderName) out.materialsFolderName = s.subfolderName;
     }
     if (VIEW_MODES.some(function (v) { return v.key === s.viewMode; })) out.viewMode = s.viewMode;
+    if (typeof s.alsoGdoc === "boolean") out.alsoGdoc = s.alsoGdoc;
+    if (typeof s.alsoHtml === "boolean") out.alsoHtml = s.alsoHtml;
     return out;
   }
   function typeOf(key) {
@@ -748,7 +753,7 @@
     var jobs = [];
     entries.forEach(function (n) {
       (n.blocks || []).forEach(function (b) {
-        if ((b.kind === "image" || b.kind === "file") && !b.fileId && b.dataUrl) jobs.push(idbPut(b.id, b.dataUrl));
+        if ((b.kind === "image" || b.kind === "file") && !b.fileId && b.blob) jobs.push(idbPut(b.id, b.blob));
       });
     });
     return Promise.all(jobs);
@@ -756,16 +761,17 @@
   function saveLocal() {
     stashPending();
     try {
-      // dataUrl 은 IndexedDB 로 빠졌으므로 localStorage 에는 넣지 않는다
+      // 파일 본문(Blob)은 IndexedDB 에 있으므로 localStorage 에는 넣지 않는다
       localStorage.setItem(LS.entries, JSON.stringify(entries, function (k, v) {
-        return (k === "dataUrl" && idbOK) ? undefined : v;
+        if (k === "blob" || k === "dataUrl") return undefined;
+        return v;
       }));
       localStorage.setItem(LS.tombs, JSON.stringify(tombstones));
     } catch (e) {
       toast("브라우저 저장 공간이 가득 찼습니다. 드라이브에 연결하면 해결됩니다.");
     }
   }
-  // 새로고침 후 대기 중인 첨부 본문을 되살린다
+  // 새로고침 후 아직 못 올린 첨부 본문을 되살린다
   function rehydratePending() {
     return idbAll().then(function (map) {
       var used = {}, changed = false;
@@ -773,14 +779,28 @@
         (n.blocks || []).forEach(function (b) {
           if ((b.kind === "image" || b.kind === "file") && !b.fileId) {
             used[b.id] = 1;
-            if (!b.dataUrl && map[b.id]) { b.dataUrl = map[b.id]; changed = true; }
+            if (!b.blob && map[b.id]) {
+              // 예전 버전은 base64 문자열로 저장했으므로 Blob 으로 바꿔 준다
+              var v = map[b.id];
+              if (typeof v === "string") v = dataUrlToBlob(v);
+              if (v instanceof Blob) { b.blob = v; changed = true; }
+              else idbDel(b.id);   // 못 쓰는 값이면 버린다
+            }
           }
         });
       });
-      // 고아 데이터 청소
       Object.keys(map).forEach(function (k) { if (!used[k]) idbDel(k); });
       if (changed) render();
     });
+  }
+  function dataUrlToBlob(u) {
+    try {
+      var mime = mimeOfDataUrl(u);
+      var bin = atob(b64of(u));
+      var arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: mime });
+    } catch (e) { return null; }
   }
 
   // 예전 버전(본문+첨부 분리)을 블록 구조로 변환
@@ -943,12 +963,15 @@
     });
     return Promise.all(jobs);
   }
-  function uploadFile(name, mimeType, payload, isBase64, fileId, parentId) {
+  // mediaType 을 따로 주면 "저장될 형식"과 "올리는 본문 형식"을 다르게 할 수 있다.
+  // 예: 구글 문서로 변환 저장 → mimeType=google-apps.document, mediaType=text/html
+  function uploadFile(name, mimeType, payload, isBase64, fileId, parentId, mediaType) {
+    var media = mediaType || mimeType;
     var boundary = "pkems" + Math.random().toString(36).slice(2);
     var d = "\r\n--" + boundary + "\r\n", c = "\r\n--" + boundary + "--";
     var meta = fileId ? { name: name } : { name: name, mimeType: mimeType, parents: [parentId || folder.id] };
     var body = d + "Content-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(meta) +
-      d + "Content-Type: " + mimeType + "\r\n" + (isBase64 ? "Content-Transfer-Encoding: base64\r\n" : "") + "\r\n" +
+      d + "Content-Type: " + media + "\r\n" + (isBase64 ? "Content-Transfer-Encoding: base64\r\n" : "") + "\r\n" +
       payload + c;
     var url = "https://www.googleapis.com/upload/drive/v3/files" + (fileId ? "/" + fileId : "") +
       "?uploadType=multipart&fields=id,name&supportsAllDrives=true";
@@ -958,6 +981,74 @@
       body: body
     });
   }
+  /* ---- 큰 파일용: 조각내어 올리는 업로드 ----
+     base64 로 통째로 만들면 200MB 파일에서 브라우저가 죽습니다.
+     Blob 을 그대로 8MB 씩 끊어 보냅니다.                       */
+  function uploadBlob(name, mime, blob, parentId, fileId, onProgress) {
+    var meta = fileId ? { name: name } : { name: name, mimeType: mime || "application/octet-stream", parents: [parentId] };
+    var url = "https://www.googleapis.com/upload/drive/v3/files" + (fileId ? "/" + fileId : "") +
+      "?uploadType=resumable&fields=id,name&supportsAllDrives=true";
+    return driveFetch(url, {
+      method: fileId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify(meta)
+    }).then(function (res) {
+      if (!res.ok) throw new Error("업로드 시작 실패 (" + res.status + ")");
+      var loc = res.headers.get("Location") || res.headers.get("location");
+      if (!loc) throw new Error("NO_LOCATION");
+      return putChunks(loc, blob, onProgress);
+    });
+  }
+  function putChunks(sessionUrl, blob, onProgress) {
+    var total = blob.size;
+    if (!total) {
+      return fetch(sessionUrl, { method: "PUT", headers: { "Authorization": "Bearer " + accessToken } })
+        .then(function (r) { return r.json(); });
+    }
+    function send(start) {
+      var end = Math.min(start + RESUMABLE_CHUNK, total);
+      return fetch(sessionUrl, {
+        method: "PUT",
+        headers: {
+          "Authorization": "Bearer " + accessToken,
+          "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total
+        },
+        body: blob.slice(start, end)
+      }).then(function (r) {
+        if (r.status === 308) {
+          var range = r.headers.get("Range") || r.headers.get("range");
+          var next = range ? (parseInt(range.split("-")[1], 10) + 1) : end;
+          if (onProgress) onProgress(next / total);
+          return send(next);
+        }
+        if (!r.ok) throw new Error("업로드 실패 (" + r.status + ")");
+        if (onProgress) onProgress(1);
+        return r.json();
+      });
+    }
+    return send(0);
+  }
+  // 조각 업로드가 막히면(사내망 등) 작은 파일은 예전 방식으로 올려 본다
+  function blobToBase64(blob) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { res(b64of(r.result)); };
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+  }
+  function uploadAttachment(b, parentId, onProgress) {
+    var mime = b.mime || "application/octet-stream";
+    return uploadBlob(b.name, mime, b.blob, parentId, null, onProgress)
+      .catch(function (e) {
+        if (b.blob.size > 25 * 1024 * 1024) throw e;   // 큰 파일은 대안이 없다
+        console.warn("조각 업로드 실패, 예전 방식으로 재시도", e);
+        return blobToBase64(b.blob).then(function (b64) {
+          return uploadFile(b.name, mime, b64, true, null, parentId);
+        });
+      });
+  }
+
   function trashFile(id) {
     if (!id) return Promise.resolve();
     return driveFetch("https://www.googleapis.com/drive/v3/files/" + id + "?supportsAllDrives=true", {
@@ -1271,6 +1362,80 @@
     return L.join("\n").replace(/\n{3,}/g, "\n\n");
   }
 
+  /* ---------- 사람이 읽기 좋은 형식 (구글 문서 / HTML) ---------- */
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  // 사람이 읽는 문서에서는 [[제목]] 대괄호를 벗겨 준다
+  function plainLinks(s) {
+    return String(s == null ? "" : s).replace(/\[\[([^\[\]|]+?)(?:\|([^\[\]]*?))?\]\]/g, function (m, a, b) {
+      return (b && b.trim()) ? b.trim() : a.trim();
+    });
+  }
+  function buildHtml(n) {
+    var t = typeOf(n.type);
+    var H = [];
+    H.push('<h1>' + esc(n.title || "(제목 없음)") + '</h1>');
+    var meta = [t.icon + " " + t.label, formatDate(n.createdAt)];
+    if ((n.tags || []).length) meta.push(n.tags.map(function (x) { return "#" + x; }).join(" "));
+    H.push('<p><i>' + esc(meta.join("  ·  ")) + '</i></p>');
+    H.push("<hr />");
+
+    (n.blocks || []).forEach(function (b) {
+      if (b.kind === "text") {
+        plainLinks(b.text).split(/\n{2,}/).forEach(function (para) {
+          if (para.trim()) H.push("<p>" + esc(para).replace(/\n/g, "<br />") + "</p>");
+        });
+      } else if (b.kind === "heading") {
+        if (b.text) H.push("<h2>" + esc(plainLinks(b.text)) + "</h2>");
+      } else if (b.kind === "quote") {
+        if (b.text) H.push('<blockquote><p>' + esc(plainLinks(b.text)).replace(/\n/g, "<br />") + "</p></blockquote>");
+      } else if (b.kind === "divider") {
+        H.push("<hr />");
+      } else if (b.kind === "image") {
+        var cap = b.caption || b.original || "";
+        if (b.fileId) {
+          H.push('<p><a href="' + driveLink(b.fileId) + '">🖼️ ' + esc(cap || b.name) + "</a></p>");
+        } else {
+          H.push("<p>🖼️ " + esc(cap || b.name || "") + "</p>");
+        }
+      } else if (b.kind === "file") {
+        var nm = b.caption || b.name || b.original;
+        H.push('<p>📎 ' + (b.fileId ? '<a href="' + driveLink(b.fileId) + '">' + esc(nm) + "</a>" : esc(nm)) + "</p>");
+      } else if (b.kind === "link") {
+        if (b.url) H.push('<p>🔗 <a href="' + esc(b.url) + '">' + esc(b.label || b.url) + "</a></p>");
+      }
+    });
+
+    var rels = (n.relations || []).map(function (r) {
+      var tt = null;
+      entries.forEach(function (x) { if (x.id === r.to) tt = x; });
+      return tt ? { title: tt.title, label: r.label || "" } : null;
+    }).filter(Boolean);
+    if (rels.length) {
+      H.push("<h2>연결</h2><ul>");
+      rels.forEach(function (r) { H.push("<li>" + esc(r.title) + (r.label ? " — " + esc(r.label) : "") + "</li>"); });
+      H.push("</ul>");
+    }
+    return '<html><head><meta charset="utf-8"><title>' + esc(n.title || "") + "</title></head><body>" +
+      H.join("\n") + "</body></html>";
+  }
+  // 구글 문서로 변환 저장 (mimeType 은 문서, 올리는 본문은 HTML)
+  function saveAsGoogleDoc(n, parentId) {
+    var name = stemOf(mdName(n));
+    var html = buildHtml(n);
+    return uploadFile(name, "application/vnd.google-apps.document", html, false, n.docId || null, parentId, "text/html")
+      .then(function (r) { if (r && r.id) n.docId = r.id; })
+      .catch(function (e) { console.warn("구글 문서 저장 실패", e); });
+  }
+  function saveAsHtml(n, parentId) {
+    var name = stemOf(mdName(n)) + ".html";
+    return uploadFile(name, "text/html", buildHtml(n), false, n.htmlId || null, parentId)
+      .then(function (r) { if (r && r.id) n.htmlId = r.id; })
+      .catch(function (e) { console.warn("HTML 저장 실패", e); });
+  }
+
   /* =========================================================
      7. 동기화
      ========================================================= */
@@ -1291,6 +1456,7 @@
       relations: (n.relations || []).map(function (r) { return { to: r.to, label: r.label || "" }; }),
       createdAt: n.createdAt, updatedAt: n.updatedAt,
       mdId: n.mdId || null, mdName: n.mdName || null,
+      docId: n.docId || null, htmlId: n.htmlId || null,
       folderId: n.folderId || null, folderName: n.folderName || null
     };
   }
@@ -1405,13 +1571,23 @@
           .then(function () {
             // 대기 중인 첨부 업로드
             var pending = (n.blocks || []).filter(function (b) {
-              return (b.kind === "image" || b.kind === "file") && !b.fileId && b.dataUrl;
+              return (b.kind === "image" || b.kind === "file") && !b.fileId && b.blob;
             });
             return pending.reduce(function (p, b) {
               return p.then(function () {
-                return uploadFile(b.name, b.mime || "application/octet-stream", b64of(b.dataUrl), true, null, t.file)
-                  .then(function (r) { b.fileId = r.id; delete b.dataUrl; n._dirty = true; idbDel(b.id); })
-                  .catch(function (e) { console.warn("첨부 업로드 실패", b.name, e); });
+                var big = b.blob.size > 6 * 1024 * 1024;
+                if (big) setSyncPill("↑ " + b.name.slice(0, 14) + "… 0%", true);
+                return uploadAttachment(b, t.file, big ? function (f) {
+                  setSyncPill("↑ " + b.name.slice(0, 14) + "… " + Math.round(f * 100) + "%", true);
+                } : null)
+                  .then(function (r) {
+                    b.fileId = r.id; delete b.blob; dropPreview(b.id);
+                    n._dirty = true; idbDel(b.id);
+                  })
+                  .catch(function (e) {
+                    console.warn("첨부 업로드 실패", b.name, e);
+                    toast("「" + b.name + "」 업로드 실패: " + (e && e.message ? e.message : e));
+                  });
               });
             }, Promise.resolve());
           })
@@ -1421,8 +1597,14 @@
             var pre = n.mdId ? Promise.resolve(want) : uniqueName(want, t.md);
             return pre.then(function (finalName) {
               return uploadFile(finalName, "text/markdown", buildMarkdown(n), false, n.mdId || null, t.md)
-                .then(function (r) { n.mdId = r.id; n.mdName = finalName; delete n._dirty; });
-            });
+                .then(function (r) { n.mdId = r.id; n.mdName = finalName; });
+            }).then(function () {
+              // 사람이 읽기 좋은 사본도 함께
+              var extra = [];
+              if (settings.alsoGdoc) extra.push(saveAsGoogleDoc(n, t.md));
+              if (settings.alsoHtml) extra.push(saveAsHtml(n, t.md));
+              return Promise.all(extra);
+            }).then(function () { delete n._dirty; });
           })
           .catch(function (e) { console.warn("저장 실패", n.title, e); })
           .then(tick);
@@ -1490,6 +1672,13 @@
     link:    { icon: "🔗", label: "링크" },
     divider: { icon: "➖", label: "구분선" }
   };
+
+  // 블록 복사 — JSON 복제를 쓰면 Blob(파일 본문)이 빈 객체로 뭉개진다
+  function cloneBlock(b) {
+    var c = {};
+    for (var k in b) if (Object.prototype.hasOwnProperty.call(b, k)) c[k] = b[k];
+    return c;
+  }
 
   function newBlock(kind, data) {
     var b = { id: uid(), kind: kind };
@@ -1600,9 +1789,10 @@
 
       } else { // image / file
         var m = el("div", "media");
-        if (b.kind === "image" && (b.dataUrl || b.fileId)) {
+        var pv = previewUrl(b);
+        if (b.kind === "image" && (pv || b.fileId)) {
           var img = el("img", "thumb");
-          if (b.dataUrl) img.src = b.dataUrl; else loadDriveImage(b.fileId, img);
+          if (pv) img.src = pv; else loadDriveImage(b.fileId, img);
           m.appendChild(img);
         } else {
           m.appendChild(el("div", "ficon", fileIcon(b.mime, b.original)));
@@ -1651,7 +1841,7 @@
     var body = el("div", "mbody");
     body.appendChild(el("p", "sheetnote", mobile
       ? "휴대폰 브라우저는 화면을 직접 캡처할 수 없습니다. 전원 + 음량↓(아이폰은 전원 + 음량↑)로 스크린샷을 찍은 뒤 갤러리에서 고르면 PC와 똑같이 영역을 잘라 넣을 수 있습니다."
-      : "화면을 직접 캡처하거나, 이미 가지고 있는 이미지 파일에서 필요한 부분만 잘라 넣을 수 있습니다."));
+      : "가장 빠른 방법은 Win+Shift+S(맥 ⌘⇧4)로 캡처한 뒤 아래 «클립보드에서 붙여넣기» 입니다. 창 공유 화면이 뜨지 않습니다."));
 
     function sheetBtn(emoji, title, sub, onClick) {
       var b = el("button", "sheetbtn");
@@ -1669,10 +1859,12 @@
     if (mobile) {
       sheetBtn("🖼️", "갤러리에서 고르기", "스크린샷·사진을 골라 영역을 자릅니다", function () { $("cropPickInput").click(); });
       sheetBtn("📷", "카메라로 찍기", "칠판·유인물을 바로 찍어 넣습니다", pickFromCamera);
+      sheetBtn("📋", "클립보드에서 붙여넣기", "복사해 둔 이미지를 바로 넣습니다", pasteFromClipboard);
     } else {
-      sheetBtn("🖥️", "화면 캡처하기", "창·탭을 고른 뒤 영역을 자릅니다", startScreenCapture);
+      sheetBtn("📋", "클립보드에서 붙여넣기", "Win+Shift+S 로 캡처한 것을 바로 — 창 공유 안 뜸", pasteFromClipboard);
       sheetBtn("🖼️", "이미지 파일에서 고르기", "가지고 있는 사진의 일부만 잘라 넣습니다", function () { $("cropPickInput").click(); });
-      sheetBtn("📷", "웹캠·휴대폰 카메라", "기기에 카메라가 있으면 바로 촬영합니다", pickFromCamera);
+      sheetBtn("📷", "웹캠으로 찍기", "카메라 화면을 보면서 촬영합니다", openWebcam);
+      sheetBtn("🖥️", "화면 캡처하기", "창·탭을 고르는 화면이 뜹니다", startScreenCapture);
     }
 
     var tg = el("label", "sheettoggle");
@@ -1709,6 +1901,103 @@
       img.src = url;
     });
   }
+  /* ---------- 웹캠으로 바로 찍기 (PC) ---------- */
+  function openWebcam() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast("이 브라우저에서는 웹캠을 쓸 수 없습니다.");
+      return;
+    }
+    var stream = null, alive = true;
+    navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
+      .then(function (s) {
+        stream = s;
+        if (!alive) { s.getTracks().forEach(function (t) { t.stop(); }); return; }
+        showCam(s);
+      })
+      .catch(function (e) {
+        var n = (e && e.name) || "";
+        if (n === "NotAllowedError") toast("카메라 사용이 거부되었습니다. 주소창의 카메라 아이콘에서 허용해 주세요.");
+        else if (n === "NotFoundError") toast("연결된 카메라를 찾지 못했습니다.");
+        else toast("카메라를 열 수 없습니다: " + (e && e.message ? e.message : e));
+      });
+
+    function stop() {
+      alive = false;
+      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+      stream = null;
+    }
+
+    function showCam(s) {
+      closeModal();
+      var bg = el("div", "modal-bg");
+      var m = el("div", "card modal"); m.style.maxWidth = "720px";
+      var head = el("div", "mhead");
+      head.appendChild(el("h3", null, "📷 웹캠으로 찍기"));
+      head.appendChild(el("span", "spacer"));
+      var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+      head.appendChild(x);
+      m.appendChild(head);
+
+      var body = el("div", "mbody"); body.style.textAlign = "center";
+      var v = document.createElement("video");
+      v.autoplay = true; v.playsInline = true; v.muted = true;
+      v.className = "camview";
+      v.srcObject = s;
+      body.appendChild(v);
+      body.appendChild(el("p", "crophint", "화면에 담기면 «찍기» 를 누르세요. 찍은 뒤 필요한 부분만 잘라 넣을 수 있습니다."));
+      m.appendChild(body);
+
+      var foot = el("div", "mfoot");
+      foot.appendChild(el("span", "spacer"));
+      var cancel = el("button", "btn", "취소");
+      cancel.addEventListener("click", closeModal);
+      var shoot = el("button", "btn primary", "📷 찍기");
+      shoot.addEventListener("click", function () {
+        var w = v.videoWidth, h = v.videoHeight;
+        if (!w || !h) { toast("아직 화면이 준비되지 않았습니다. 잠시 후 다시 눌러 주세요."); return; }
+        var c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(v, 0, 0, w, h);
+        stop();
+        openCropModal(c, "웹캠_" + dateStamp() + "_" + timeStamp() + ".png");
+      });
+      foot.appendChild(cancel); foot.appendChild(shoot);
+      m.appendChild(foot);
+
+      bg.appendChild(m);
+      bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+      $("modalHost").appendChild(bg);
+      modalEl = bg;
+      modalCleanup = stop;
+    }
+  }
+
+  /* ---------- 클립보드에서 바로 붙여넣기 (창 공유 없이) ---------- */
+  function pasteFromClipboard() {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      toast("이 브라우저는 버튼으로 붙여넣기를 지원하지 않습니다. 글 칸을 누르고 Ctrl+V 를 눌러 주세요.");
+      return;
+    }
+    navigator.clipboard.read().then(function (items) {
+      var files = [], jobs = [];
+      items.forEach(function (it) {
+        var type = it.types.filter(function (t) { return /^image\//.test(t); })[0];
+        if (!type) return;
+        jobs.push(it.getType(type).then(function (blob) {
+          var ext = "." + (type.split("/")[1] || "png").replace("jpeg", "jpg");
+          files.push(new File([blob], "붙여넣기_" + dateStamp() + "_" + timeStamp() + ext, { type: type }));
+        }));
+      });
+      return Promise.all(jobs).then(function () {
+        if (!files.length) { toast("클립보드에 이미지가 없습니다. 먼저 Win+Shift+S(맥 ⌘⇧4)로 캡처하세요."); return; }
+        acceptFiles(files);
+      });
+    }).catch(function (e) {
+      if (e && e.name === "NotAllowedError") toast("클립보드 읽기 권한이 필요합니다. 주소창 아이콘에서 허용하거나, 글 칸에서 Ctrl+V 를 쓰세요.");
+      else toast("클립보드를 읽지 못했습니다. 글 칸에서 Ctrl+V 를 써 주세요.");
+    });
+  }
+
   // 카메라 촬영 — 누를 때만 입력칸을 만들고 바로 없앤다
   function pickFromCamera() {
     var inp = document.createElement("input");
@@ -1773,19 +2062,25 @@
       });
   }
 
-  // 캔버스를 PNG(너무 크면 JPEG)로 변환
+  // 캔버스를 PNG(너무 크면 JPEG) Blob 으로
   function canvasToAttachment(canvas, srcName) {
-    var url = canvas.toDataURL("image/png");
-    var mime = "image/png", ext = ".png";
-    if (url.length > 8 * 1024 * 1024) {
-      url = canvas.toDataURL("image/jpeg", 0.88);
-      mime = "image/jpeg"; ext = ".jpg";
-    }
     var base = srcName
       ? safeName(stemOf(srcName), 40) + "_잘라냄"
       : "화면캡처_" + dateStamp() + "_" + timeStamp();
-    var bytes = Math.round((url.length - url.indexOf(",") - 1) * 0.75);
-    return { original: base + ext, mime: mime, size: bytes, dataUrl: url };
+    return new Promise(function (res) {
+      canvas.toBlob(function (png) {
+        function done(blob, ext) {
+          res({ original: base + ext, mime: blob.type, size: blob.size, blob: blob });
+        }
+        if (png && png.size > 6 * 1024 * 1024) {
+          canvas.toBlob(function (jpg) { done(jpg || png, jpg ? ".jpg" : ".png"); }, "image/jpeg", 0.88);
+        } else if (png) {
+          done(png, ".png");
+        } else {
+          canvas.toBlob(function (jpg) { done(jpg, ".jpg"); }, "image/jpeg", 0.9);
+        }
+      }, "image/png");
+    });
   }
 
   function openCropModal(canvas, srcName) {
@@ -1889,17 +2184,14 @@
       var c = document.createElement("canvas");
       c.width = sw; c.height = sh;
       c.getContext("2d").drawImage(full, sx, sy, sw, sh, 0, 0, sw, sh);
-      var att = canvasToAttachment(c, srcName);
-      if (att.size > MAX_FILE_MB * 1024 * 1024) {
-        toast("캡처 이미지가 " + MAX_FILE_MB + "MB 를 넘습니다. 영역을 좁혀 다시 잘라 주세요.");
-        return;
-      }
-      blocks.push(newBlock("image", att));
-      renderBlocks();
-      closeModal();
-      toast("캡처 " + sw + "×" + sh + " 를 추가했습니다. (" + humanSize(att.size) + ")");
-      var last = $("blocks").lastElementChild;
-      if (last) last.scrollIntoView({ behavior: "smooth", block: "center" });
+      canvasToAttachment(c, srcName).then(function (att) {
+        blocks.push(newBlock("image", att));
+        renderBlocks();
+        closeModal();
+        toast("캡처 " + sw + "×" + sh + " 를 추가했습니다. (" + humanSize(att.size) + ")");
+        var last = $("blocks").lastElementChild;
+        if (last) last.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     }
   }
 
@@ -1997,29 +2289,38 @@
     acceptFiles(files, afterBlock);
   }
 
+  // 첨부는 Blob 그대로 들고 있는다 (base64 문자열로 부풀리지 않음)
+  var objUrls = {};
+  function previewUrl(b) {
+    if (objUrls[b.id]) return objUrls[b.id];
+    if (!(b.blob instanceof Blob)) { if (b.blob) delete b.blob; return null; }
+    try { objUrls[b.id] = URL.createObjectURL(b.blob); } catch (e) { return null; }
+    return objUrls[b.id];
+  }
+  function dropPreview(id) {
+    if (objUrls[id]) { try { URL.revokeObjectURL(objUrls[id]); } catch (e) {} delete objUrls[id]; }
+  }
+
   function acceptFiles(fileList, afterBlock) {
     var files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return Promise.resolve();
-    var tasks = files.map(function (f) {
+    var made = [];
+    files.forEach(function (f) {
       if (f.size > MAX_FILE_MB * 1024 * 1024) {
-        toast("「" + f.name + "」 은 " + MAX_FILE_MB + "MB 를 넘어 건너뜁니다.");
-        return Promise.resolve(null);
+        toast("「" + f.name + "」 은 " + MAX_FILE_MB + "MB 를 넘어 건너뜁니다. (" + humanSize(f.size) + ")");
+        return;
       }
-      return fileToDataURL(f).then(function (url) {
-        var mime = f.type || mimeOfDataUrl(url);
-        return newBlock(/^image\//.test(mime) ? "image" : "file", {
-          original: f.name || "file", mime: mime, size: f.size, dataUrl: url
-        });
-      });
+      var mime = f.type || "application/octet-stream";
+      made.push(newBlock(/^image\//.test(mime) ? "image" : "file", {
+        original: f.name || "file", mime: mime, size: f.size, blob: f
+      }));
     });
-    return Promise.all(tasks).then(function (arr) {
-      var made = arr.filter(Boolean);
-      if (!made.length) return;
-      var at = afterBlock ? blocks.findIndex(function (b) { return b.id === afterBlock.id; }) + 1 : blocks.length;
-      blocks.splice.apply(blocks, [at, 0].concat(made));
-      renderBlocks();
-      toast(made.length + "개를 추가했습니다.");
-    });
+    if (!made.length) return Promise.resolve();
+    var at = afterBlock ? blocks.findIndex(function (b) { return b.id === afterBlock.id; }) + 1 : blocks.length;
+    blocks.splice.apply(blocks, [at, 0].concat(made));
+    renderBlocks();
+    toast(made.length + "개를 추가했습니다.");
+    return Promise.resolve();
   }
 
   /* =========================================================
@@ -2041,7 +2342,7 @@
     currentType = n.type;
     $("title").value = n.title || "";
     $("tags").value = (n.tags || []).join(", ");
-    blocks = JSON.parse(JSON.stringify(n.blocks || []));
+    blocks = (n.blocks || []).map(cloneBlock);
     renderTypeChips(); renderBlocks();
     $("composerTitle").textContent = "✏️ 기록 편집";
     $("btnSave").textContent = "수정 저장";
@@ -2091,18 +2392,13 @@
       if (b.kind === "link") return !!(b.url && b.url.trim());
       return !!(b.text && b.text.trim());
     }).map(function (b) {
-      var c = JSON.parse(JSON.stringify(b));
+      var c = cloneBlock(b);
       if (c.kind === "link" && !/^(https?:|mailto:)/i.test(c.url)) c.url = "https://" + c.url.replace(/^\/+/, "");
       if (c.kind === "image" || c.kind === "file") {
         order++;
         if (!c.name) c.name = attachName(n, order, c.original || "file");
       }
       return c;
-    });
-    // dataUrl 은 JSON 복제로 유지되므로 원본 blocks 의 것을 다시 붙여 준다
-    n.blocks.forEach(function (c) {
-      var src = blocks.filter(function (b) { return b.id === c.id; })[0];
-      if (src && src.dataUrl && !c.fileId) c.dataUrl = src.dataUrl;
     });
 
     saveLocal();
@@ -2220,7 +2516,8 @@
         var img = el("img");
         img.alt = b.caption || b.original || "";
         img.loading = "lazy";
-        if (b.dataUrl) img.src = b.dataUrl;
+        var pvu = previewUrl(b);
+        if (pvu) img.src = pvu;
         else if (b.fileId && imgCount < THUMB_LIMIT) { imgCount++; loadDriveImage(b.fileId, img); }
         fig.appendChild(img);
         var capText = (b.caption || "") + (b.name ? (b.caption ? " · " : "") + b.name : "");
@@ -2364,7 +2661,18 @@
       var pending = (n.blocks || []).filter(function (b) { return (b.kind === "image" || b.kind === "file") && !b.fileId; }).length;
       foot.appendChild(el("span", "sync-dot " + (n.mdId && !pending ? "ok" : "pending"),
         n.mdId && !pending ? "☁ 드라이브 저장됨" : (connected ? "⏳ 업로드 대기" : "💾 이 기기에만 저장")));
-      if (n.mdId) {
+      if (n.docId) {
+        var gd = el("a", "btn sm", "📄 문서 열기");
+        gd.href = "https://docs.google.com/document/d/" + n.docId + "/edit";
+        gd.target = "_blank"; gd.rel = "noopener noreferrer"; gd.style.textDecoration = "none";
+        foot.appendChild(gd);
+      }
+      if (n.folderId) {
+        var fd = el("a", "btn sm", "📁 폴더");
+        fd.href = "https://drive.google.com/drive/folders/" + n.folderId;
+        fd.target = "_blank"; fd.rel = "noopener noreferrer"; fd.style.textDecoration = "none";
+        foot.appendChild(fd);
+      } else if (n.mdId) {
         var md = el("a", "btn sm", "📝 .md 열기");
         md.href = driveLink(n.mdId); md.target = "_blank"; md.rel = "noopener noreferrer";
         md.style.textDecoration = "none";
@@ -3388,6 +3696,28 @@
     }
 
     function paintNaming() {
+      var ff = el("div", "field");
+      ff.appendChild(el("label", null, "저장 형식 — 무엇으로 남길까요?"));
+      ff.appendChild(el("p", "desc", "마크다운(.md)은 항상 저장됩니다. 사람이 읽기 편한 사본을 함께 만들 수 있습니다."));
+      [["alsoGdoc", "📄 구글 문서로도 저장", "드라이브에서 클릭 한 번에 열립니다. 제목·소제목·인용이 서식으로 보입니다. (가장 읽기 편함)"],
+       ["alsoHtml", "🌐 HTML 파일로도 저장", "브라우저로 열어 보거나 그대로 웹에 올릴 수 있습니다."]
+      ].forEach(function (opt) {
+        var lab = el("label");
+        lab.style.cssText = "display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:13.5px;";
+        var cb = el("input"); cb.type = "checkbox"; cb.checked = !!draft[opt[0]];
+        cb.style.marginTop = "3px";
+        cb.addEventListener("change", function () { draft[opt[0]] = cb.checked; });
+        var txt = el("span");
+        txt.appendChild(el("b", null, opt[1]));
+        txt.appendChild(el("small", "desc", opt[2]));
+        txt.querySelector("small").style.display = "block";
+        lab.appendChild(cb); lab.appendChild(txt);
+        ff.appendChild(lab);
+      });
+      ff.appendChild(el("p", "desc",
+        "마크다운은 옵시디언·LLM 연동용이고, 구글 문서는 사람이 읽는 용도입니다. 둘 다 켜 두면 같은 내용이 두 형식으로 나란히 저장됩니다."));
+      body.appendChild(ff);
+
       body.appendChild(el("p", "desc", "드라이브에 저장될 파일 이름을 원하는 대로 정하세요. 태그를 눌러 조립할 수 있습니다."));
       body.appendChild(makePatternField("📝 글(마크다운) 파일 이름", "mdPattern", MD_PRESETS, true));
       body.appendChild(makePatternField("📎 사진·파일 이름", "filePattern", FILE_PRESETS, false));
@@ -3476,6 +3806,22 @@
   $("fileInput").addEventListener("change", function (e) { acceptFiles(e.target.files); e.target.value = ""; });
   $("imgInput").addEventListener("change", function (e) { acceptFiles(e.target.files); e.target.value = ""; });
   $("cropPickInput").addEventListener("change", function (e) { handlePickedImage(e.target.files[0]); e.target.value = ""; });
+
+  // 화면 아무 데서나 Ctrl+V 로 이미지 붙여넣기 (글 칸에 커서가 없어도)
+  document.addEventListener("paste", function (e) {
+    var t = e.target;
+    if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;  // 글 칸은 각자 처리
+    if (modalEl) return;
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    var files = [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") { var f = items[i].getAsFile(); if (f) files.push(f); }
+    }
+    if (!files.length) return;
+    e.preventDefault();
+    acceptFiles(files);
+  });
 
   // 화면 어디에 놓아도 첨부되도록 (파일을 끌어올 때만 반응)
   var dragDepth = 0;
