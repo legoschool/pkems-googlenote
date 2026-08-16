@@ -155,7 +155,11 @@
 
   /* 기록마다 위쪽에 색 줄을 둬서 어디서 끊기는지 한눈에 보이게 한다 */
   .entry { padding: 16px 18px; margin-bottom: 12px; border-top: 3px solid var(--brand); }
-  .entry .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  /* 유형 배지 바로 뒤에 제목이 붙고, 길면 그 자리에서 줄만 바뀐다 */
+  .entry .head { display: block; }
+  .entry .head .badge { display: inline; margin-right: 7px; white-space: nowrap; }
+  .entry .head h3 { display: inline; font-size: 16.5px; line-height: 1.45; }
+  .entry .head .when { display: block; margin-top: 6px; }
   .badge { font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); white-space: nowrap; }
   .entry h3 { margin: 0; font-size: 16.5px; flex: 1 1 auto; min-width: 0; }
   .when { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
@@ -332,9 +336,6 @@
   .embedframe { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); display: block; }
   .block.embed textarea { font-size: 12.5px; }
 
-  /* 사진 접기 */
-  .photobox { margin: 0 0 10px; }
-  .btn.photobtn { font-size: 12.5px; padding: 6px 11px; }
 
   /* ---------- 웹 클리퍼 ---------- */
   .bmk {
@@ -384,7 +385,6 @@
                    gap: 12px; align-items: stretch; }
   #list.gridview .entry { margin-bottom: 0; height: 340px; display: flex; flex-direction: column; overflow: hidden; }
   #list.gridview .head, #list.gridview .tags { flex: 0 0 auto; }
-  #list.gridview h3 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   /* 내용은 남는 높이만큼만 차지하고, 넘치면 아래로 흐리게 잘린다 */
   #list.gridview .content { flex: 1 1 auto; min-height: 0; max-height: none; overflow: hidden; position: relative; }
   #list.gridview .content.collapsed::after { display: none; }
@@ -397,7 +397,8 @@
   #list.gridview .content figure img { max-height: 150px; }
   #list.gridview .rel { display: none; }
   @media (max-width: 700px) { #list.gridview { grid-template-columns: 1fr 1fr; gap: 8px; }
-    #list.gridview .entry { padding: 11px; height: 290px; } #list.gridview h3 { font-size: 14.5px; } }
+    #list.gridview .entry { padding: 11px; height: 290px; }
+    #list.gridview .head h3 { font-size: 14.5px; } }
 
   /* 목록 */
   .listview { padding: 4px; }
@@ -648,7 +649,6 @@
   var SETTINGS_NAME = "PKEMS-settings.json";
   var MAX_FILE_MB = 200;
   var RESUMABLE_CHUNK = 8 * 1024 * 1024;   // 8MB 씩 끊어서 올린다
-  var THUMB_LIMIT = 6; // 카드 한 장에 미리 불러올 이미지 수
 
   var DEFAULTS = {
     version: 1,
@@ -816,7 +816,6 @@
   var filterTags = [];      // 태그로 좁혀 보기 (여러 개 고르면 모두 가진 기록만)
   var searchQ = "";
   var expanded = {};
-  var photoOpen = {};       // 카드에서 사진 묶음을 펼쳐 둔 곳
 
   var tokenClient = null, accessToken = null, connected = false, userEmail = "";
   var indexFileId = null, settingsFileId = null, subFolderId = null;
@@ -2910,6 +2909,26 @@
   /* =========================================================
      10. 목록 렌더
      ========================================================= */
+  /* 썸네일은 «화면에 들어올 때» 불러온다.
+     예전에는 카드당 6장까지만 불러와서, 사진이 많으면 나머지가 빈 칸으로 남았다. */
+  var lazyObs = null;
+  function lazyDriveImage(fileId, imgEl) {
+    if (!fileId) return;
+    if (imgUrlCache[fileId]) { imgEl.src = imgUrlCache[fileId]; return; }
+    if (typeof IntersectionObserver === "undefined") { loadDriveImage(fileId, imgEl); return; }
+    if (!lazyObs) {
+      lazyObs = new IntersectionObserver(function (rows) {
+        rows.forEach(function (row) {
+          if (!row.isIntersecting) return;
+          lazyObs.unobserve(row.target);
+          loadDriveImage(row.target.getAttribute("data-fid"), row.target);
+        });
+      }, { rootMargin: "300px" });
+    }
+    imgEl.setAttribute("data-fid", fileId);
+    lazyObs.observe(imgEl);
+  }
+
   function loadDriveImage(fileId, imgEl) {
     if (!fileId || !accessToken) return;
     if (imgUrlCache[fileId]) { imgEl.src = imgUrlCache[fileId]; return; }
@@ -3168,10 +3187,7 @@
     return wrap;
   }
 
-  function renderContent(n, host, opts) {
-    opts = opts || {};
-    var photosOpenByDefault = !!opts.openPhotos;   // 전체 보기에서는 펼친 채로
-    var imgCount = 0;
+  function renderContent(n, host) {
     var shots = shotsOf(n);
     var shotIndex = 0;
     var blocks = n.blocks || [];
@@ -3186,54 +3202,33 @@
     });
 
     groups.forEach(function (g) {
-      // 사진은 카드를 길게 만드는 주범이라 접어 두고, 누르면 편다
+      // 사진은 어디서나 작은 썸네일로. 누르면 크게 본다 (접기 버튼 없음)
       if (g.kind === "images") {
         var count = g.items.length;
         var startAt = shotIndex;
-        var key = n.id + ":" + g.items[0].id;
-        var box = el("div", "photobox");
-        var toggle = el("button", "btn sm photobtn");
-        toggle.type = "button";
-        var body = el("div");
-        function paint() {
-          var open = photosOpenByDefault || photoOpen[key];
-          toggle.textContent = (open ? "▲ 사진 접기" : "▼ 사진 " + count + "장 보기");
-          body.innerHTML = "";
-          body.style.display = open ? "" : "none";
-          if (!open) return;
-          if (count > 1) {
-            var gal = el("div", "gallery");
-            var SHOWN = 8;
-            g.items.slice(0, SHOWN).forEach(function (b, k) {
-              var at = startAt + k;
-              var bt = el("button");
-              bt.type = "button";
-              var im = el("img");
-              im.loading = "lazy";
-              var u = previewUrl(b);
-              if (u) im.src = u;
-              else if (b.fileId && imgCount < THUMB_LIMIT) { imgCount++; loadDriveImage(b.fileId, im); }
-              bt.appendChild(im);
-              if (k === SHOWN - 1 && count > SHOWN) {
-                bt.appendChild(el("span", "more", "+" + (count - SHOWN)));
-              }
-              bt.addEventListener("click", function () { openLightbox(shots, at); });
-              gal.appendChild(bt);
-            });
-            body.appendChild(gal);
-            body.appendChild(el("div", "galcap", "🖼️ 사진 " + count + "장 — 누르면 슬라이드로 넘겨 볼 수 있습니다"));
-          } else {
-            renderOne(g.items[0], startAt, body);
+        var gal = el("div", "gallery");
+        var SHOWN = 8;
+        g.items.slice(0, SHOWN).forEach(function (b, k) {
+          var at = startAt + k;
+          var bt = el("button");
+          bt.type = "button";
+          bt.title = (b.caption || b.name || b.original || "사진") + " — 눌러서 크게 보기";
+          var im = el("img");
+          im.loading = "lazy";
+          im.alt = b.caption || b.original || "";
+          var u = previewUrl(b);
+          if (u) im.src = u;
+          else if (b.fileId) lazyDriveImage(b.fileId, im);
+          bt.appendChild(im);
+          if (k === SHOWN - 1 && count > SHOWN) {
+            bt.appendChild(el("span", "more", "+" + (count - SHOWN)));
           }
-        }
-        toggle.addEventListener("click", function () {
-          photoOpen[key] = !(photosOpenByDefault || photoOpen[key]);
-          paint();
+          bt.addEventListener("click", function () { openLightbox(shots, at); });
+          gal.appendChild(bt);
         });
-        paint();
-        box.appendChild(toggle);
-        box.appendChild(body);
-        host.appendChild(box);
+        host.appendChild(gal);
+        host.appendChild(el("div", "galcap",
+          "🖼️ 사진 " + count + "장 — 누르면 크게 볼 수 있습니다"));
         shotIndex += count;
         return;
       }
@@ -3259,7 +3254,7 @@
         img.style.cursor = "zoom-in";
         var pvu = previewUrl(b);
         if (pvu) img.src = pvu;
-        else if (b.fileId && imgCount < THUMB_LIMIT) { imgCount++; loadDriveImage(b.fileId, img); }
+        else if (b.fileId) lazyDriveImage(b.fileId, img);
         img.addEventListener("click", function () { openLightbox(shots, shotAt < 0 ? 0 : shotAt); });
         fig.appendChild(img);
         var capText = (b.caption || "") + (b.name ? (b.caption ? " · " : "") + b.name : "");
@@ -3360,7 +3355,7 @@
     paper.appendChild(el("div", "vmeta", metaLine));
 
     var body = el("div", "content");
-    renderContent(n, body, { openPhotos: true });   // 전체 보기에서는 사진도 펼쳐서 보여 준다
+    renderContent(n, body);
     paper.appendChild(body);
 
     // 연결 — 나가는 링크와 들어오는 백링크
