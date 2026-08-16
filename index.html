@@ -252,6 +252,75 @@
   .graphempty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                 text-align: center; color: var(--ink-soft); font-size: 14px; padding: 30px; }
 
+  /* ---------- 보기 방식 전환 ---------- */
+  .viewswitch { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+  .vbtn { border: none; background: transparent; color: var(--ink-soft); font-size: 12.5px; font-weight: 700;
+          padding: 6px 10px; border-radius: 8px; white-space: nowrap; }
+  .vbtn.on { background: var(--panel); color: var(--brand); box-shadow: 0 1px 2px rgba(20,30,60,.08); }
+
+  /* 바둑판 */
+  #list.gridview { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; align-items: start; }
+  #list.gridview .entry { margin-bottom: 0; }
+  #list.gridview .collapsed { max-height: 190px; }
+  #list.gridview .morebtn { display: none; }
+  #list.gridview .content figure img { max-height: 150px; }
+  #list.gridview .rel { display: none; }
+  @media (max-width: 700px) { #list.gridview { grid-template-columns: 1fr 1fr; gap: 8px; }
+    #list.gridview .entry { padding: 11px; } #list.gridview h3 { font-size: 14.5px; }
+    #list.gridview .collapsed { max-height: 150px; } }
+
+  /* 목록 */
+  .listview { padding: 4px; }
+  .lrow { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 9px; }
+  .lrow:hover { background: var(--bg); }
+  .lrow + .lrow { border-top: 1px solid var(--line-soft); }
+  .lico { flex: 0 0 auto; font-size: 15px; }
+  .ltitle { flex: 1 1 auto; min-width: 0; text-align: left; border: none; background: transparent;
+            color: var(--ink); font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ltitle:hover { color: var(--brand); }
+  .lmeta { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-soft); }
+  .lwhen { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-soft); width: 78px; text-align: right; }
+  @media (max-width: 700px) { .lmeta { display: none; } .lwhen { width: 62px; } }
+
+  /* ---------- 관계망 정보 패널 ---------- */
+  .graphpanel {
+    position: absolute; right: 10px; top: 10px; width: 260px; max-height: calc(100% - 20px); overflow: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 12px;
+  }
+  .gp-head { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+  .gp-title { margin: 0 0 2px; font-size: 15px; }
+  .gp-when { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 8px; }
+  .gp-preview { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 10px; }
+  .gp-sec { border-top: 1px solid var(--line-soft); padding-top: 8px; margin-bottom: 8px; }
+  .gp-lab { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); margin-bottom: 5px; }
+  .gp-none { font-size: 12px; color: var(--ink-soft); opacity: .7; padding: 2px 0 4px; }
+  .gp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; }
+  .gp-go { flex: 1 1 auto; min-width: 0; text-align: left; border: none; background: var(--bg); color: var(--ink);
+           font-size: 12.5px; padding: 5px 8px; border-radius: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gp-go:hover { background: var(--brand-soft); color: var(--brand); }
+  .gp-via { font-size: 10.5px; color: var(--ink-soft); flex: 0 0 auto; }
+  .gp-acts { display: flex; gap: 6px; flex-wrap: wrap; border-top: 1px solid var(--line-soft); padding-top: 9px; }
+  .gp-acts .btn { flex: 1 1 auto; }
+  .graphhint {
+    position: absolute; left: 50%; transform: translateX(-50%); top: 10px; z-index: 5;
+    background: #1a9e5f; color: #fff; font-size: 12.5px; font-weight: 600;
+    padding: 9px 14px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.2); max-width: 92%; text-align: center;
+  }
+  @media (max-width: 700px) {
+    .graphpanel { right: 6px; left: 6px; width: auto; top: auto; bottom: 6px; max-height: 46%; }
+    .graphhint { top: auto; bottom: 8px; font-size: 12px; }
+  }
+
+  /* ---------- 도움말 ---------- */
+  .help-block { margin-bottom: 20px; }
+  .help-block h4 { margin: 0 0 7px; font-size: 15px; }
+  .help-block p { margin: 0 0 7px; font-size: 13.8px; line-height: 1.72; }
+  .help-ex {
+    background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--brand);
+    border-radius: 8px; padding: 10px 12px; margin: 8px 0 10px; white-space: pre-wrap;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.7; color: var(--ink);
+  }
+
   /* ---------- 전체 화면 드래그&드롭 ---------- */
   .dropoverlay { position: fixed; inset: 0; z-index: 120; background: rgba(47,95,214,.18);
                  backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; pointer-events: none; }
@@ -339,6 +408,7 @@
     <div class="spacer"></div>
     <span id="syncPill" class="syncpill"></span>
     <span id="acct" class="acct"></span>
+    <button id="btnHelp" class="btn sm" title="연결·백링크·관계망 사용법">❔</button>
     <button id="btnGraph" class="btn sm">🕸️ 관계망</button>
     <button id="btnSettings" class="btn sm">⚙️ 설정</button>
     <button id="btnLogin" class="btn sm primary">구글 로그인</button>
@@ -399,6 +469,7 @@
     <h2>📚 기록</h2>
     <span class="count" id="countText"></span>
     <span class="spacer"></span>
+    <div class="viewswitch" id="viewSwitch"></div>
     <input id="search" class="inp search" placeholder="제목·내용·태그 검색" />
   </div>
   <div class="chips filters" id="typeFilters"></div>
@@ -450,9 +521,25 @@
     ],
     filePattern: "{날짜}_{제목}_{번호}",
     mdPattern: "{날짜}_{유형}_{제목}",
-    useSubfolder: false,
+    // 드라이브 정리 방식: perEntry(기록마다 폴더) | materials(자료만 따로) | monthly(월별) | flat(한 폴더)
+    folderMode: "perEntry",
+    folderPattern: "{날짜}_{유형}_{제목}",
+    materialsFolderName: "자료",
+    viewMode: "stream",   // stream(나열) | grid(바둑판) | list(목록)
+    useSubfolder: false,  // 구버전 설정 호환용
     subfolderName: "자료"
   };
+  var FOLDER_MODES = [
+    { key: "perEntry", label: "기록마다 폴더 하나", desc: "2026-08-16_경험_수업회고/ 안에 .md 와 자료를 함께" },
+    { key: "materials", label: "글과 자료를 분리", desc: ".md 는 맨 위, 사진·파일은 자료/ 폴더에" },
+    { key: "monthly", label: "월별 폴더", desc: "2026-08/ 안에 그 달 기록과 자료를 모아서" },
+    { key: "flat", label: "한 폴더에 전부", desc: "예전 방식 — 나누지 않고 모두 같은 곳에" }
+  ];
+  var VIEW_MODES = [
+    { key: "stream", label: "나열", icon: "📄", desc: "내용까지 펼쳐 보기" },
+    { key: "grid", label: "바둑판", icon: "🔲", desc: "카드를 격자로" },
+    { key: "list", label: "목록", icon: "☰", desc: "제목만 한 줄씩" }
+  ];
 
   var FILE_PRESETS = [
     "{폴더명}_{날짜}_{제목}_{번호}",
@@ -598,10 +685,17 @@
         .map(function (t) { return { key: t.key, label: t.label, icon: t.icon || "🏷️" }; });
       if (!out.types.length) out.types = JSON.parse(JSON.stringify(DEFAULTS.types));
     }
-    ["filePattern", "mdPattern", "subfolderName"].forEach(function (k) {
+    ["filePattern", "mdPattern", "folderPattern", "subfolderName", "materialsFolderName"].forEach(function (k) {
       if (typeof s[k] === "string" && s[k].trim()) out[k] = s[k].trim();
     });
     out.useSubfolder = !!s.useSubfolder;
+    if (FOLDER_MODES.some(function (m) { return m.key === s.folderMode; })) out.folderMode = s.folderMode;
+    else if (s.folderMode === undefined && s.version) {
+      // 구버전 설정: useSubfolder 켜져 있었으면 '자료 분리', 아니면 '한 폴더'
+      out.folderMode = s.useSubfolder ? "materials" : "flat";
+      if (s.subfolderName) out.materialsFolderName = s.subfolderName;
+    }
+    if (VIEW_MODES.some(function (v) { return v.key === s.viewMode; })) out.viewMode = s.viewMode;
     return out;
   }
   function typeOf(key) {
@@ -786,17 +880,68 @@
       "&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true")
       .then(function (j) { return (j.files && j.files.length) ? j.files[0].id : null; });
   }
-  function ensureSubfolder() {
-    if (!settings.useSubfolder) return Promise.resolve(folder.id);
-    if (subFolderId) return Promise.resolve(subFolderId);
-    var nm = settings.subfolderName || "자료";
-    return findInFolder(nm, folder.id).then(function (id) {
-      if (id) { subFolderId = id; return id; }
-      return driveJson("https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nm, mimeType: "application/vnd.google-apps.folder", parents: [folder.id] })
-      }).then(function (f) { subFolderId = f.id; return f.id; });
+  function createFolder(name, parentId) {
+    return driveJson("https://www.googleapis.com/drive/v3/files?fields=id,name&supportsAllDrives=true", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] })
     });
+  }
+  // 이름이 같은 폴더가 있으면 재사용하고, 없으면 만든다
+  var folderCache = {};
+  function ensureNamedFolder(name, parentId) {
+    var key = parentId + "/" + name;
+    if (folderCache[key]) return Promise.resolve(folderCache[key]);
+    return findInFolder(name, parentId).then(function (id) {
+      if (id) { folderCache[key] = id; return id; }
+      return createFolder(name, parentId).then(function (f) { folderCache[key] = f.id; return f.id; });
+    });
+  }
+  // 이미 올라간 파일을 다른 폴더로 옮긴다
+  function moveToParent(fileId, newParent) {
+    if (!fileId || !newParent) return Promise.resolve();
+    return driveJson("https://www.googleapis.com/drive/v3/files/" + fileId + "?fields=parents&supportsAllDrives=true")
+      .then(function (f) {
+        var prev = (f.parents || []).join(",");
+        if (prev === newParent) return null;
+        return driveJson("https://www.googleapis.com/drive/v3/files/" + fileId +
+          "?addParents=" + newParent + (prev ? "&removeParents=" + prev : "") +
+          "&fields=id&supportsAllDrives=true", { method: "PATCH" });
+      }).catch(function () {});
+  }
+
+  // 이 기록의 .md 와 자료가 들어갈 폴더를 정한다
+  function entryFolderName(n) {
+    return applyPattern(settings.folderPattern, nameContext(n, 1, "", ""));
+  }
+  function resolveTargets(n) {
+    var mode = settings.folderMode;
+    if (mode === "flat") return Promise.resolve({ md: folder.id, file: folder.id });
+    if (mode === "materials") {
+      return ensureNamedFolder(settings.materialsFolderName || "자료", folder.id)
+        .then(function (sub) { return { md: folder.id, file: sub }; });
+    }
+    if (mode === "monthly") {
+      var m = dateStamp(n.createdAt).slice(0, 7);
+      return ensureNamedFolder(m, folder.id).then(function (id) { return { md: id, file: id }; });
+    }
+    // perEntry — 기록마다 폴더 하나
+    if (n.folderId) return Promise.resolve({ md: n.folderId, file: n.folderId, existing: true });
+    var want = entryFolderName(n);
+    return uniqueName(want, folder.id)
+      .then(function (nm) { return createFolder(nm, folder.id); })
+      .then(function (f) {
+        n.folderId = f.id; n.folderName = f.name; n._dirty = true;
+        return { md: f.id, file: f.id, created: true };
+      });
+  }
+  // 폴더 방식을 바꿨거나 새로 폴더가 생겼으면, 기존 파일도 그리로 옮긴다
+  function relocateEntryFiles(n, t) {
+    var jobs = [];
+    if (n.mdId) jobs.push(moveToParent(n.mdId, t.md));
+    (n.blocks || []).forEach(function (b) {
+      if (b.fileId) jobs.push(moveToParent(b.fileId, t.file));
+    });
+    return Promise.all(jobs);
   }
   function uploadFile(name, mimeType, payload, isBase64, fileId, parentId) {
     var boundary = "pkems" + Math.random().toString(36).slice(2);
@@ -918,8 +1063,11 @@
       var k = normTitle(n.title);
       if (k && !byTitle[k]) byTitle[k] = n;
     });
+    var byId = {};
+    entries.forEach(function (n) { byId[n.id] = n; });
     entries.forEach(function (n) {
       var seen = {}, list = [];
+      // ① 글 안에 쓴 [[제목]]
       (n.blocks || []).forEach(function (b) {
         if (!isTextBlock(b)) return;
         var re = wikiRe(), m;
@@ -928,13 +1076,28 @@
           var k = normTitle(target);
           if (!k || seen[k]) continue;
           seen[k] = 1;
-          list.push({ title: target, key: k, to: byTitle[k] ? byTitle[k].id : null });
+          list.push({ title: target, key: k, to: byTitle[k] ? byTitle[k].id : null, via: "text", label: "" });
         }
+      });
+      // ② 관계망에서 직접 이어준 연결 (설명이 붙을 수 있음)
+      (n.relations || []).forEach(function (r) {
+        var tgt = byId[r.to];
+        if (!tgt) return;
+        var k = normTitle(tgt.title);
+        var already = null;
+        for (var i = 0; i < list.length; i++) if (list[i].key === k) { already = list[i]; break; }
+        if (already) {
+          already.via = "both";
+          if (r.label && !already.label) already.label = r.label;
+          return;
+        }
+        seen[k] = 1;
+        list.push({ title: tgt.title, key: k, to: tgt.id, via: "relation", label: r.label || "" });
       });
       out[n.id] = list;
       list.forEach(function (l) {
         if (!l.to || l.to === n.id) return;
-        (back[l.to] = back[l.to] || []).push(n.id);
+        (back[l.to] = back[l.to] || []).push({ from: n.id, label: l.label || "" });
       });
     });
     _linkCache = { byTitle: byTitle, out: out, back: back };
@@ -942,8 +1105,34 @@
   }
   function outLinks(n) { return linkData().out[n.id] || []; }
   function backLinks(n) {
-    var ids = linkData().back[n.id] || [];
-    return ids.map(function (id) { return entries.filter(function (x) { return x.id === id; })[0]; }).filter(Boolean);
+    var list = linkData().back[n.id] || [];
+    return list.map(function (b) {
+      var e = entries.filter(function (x) { return x.id === b.from; })[0];
+      return e ? { entry: e, label: b.label || "" } : null;
+    }).filter(Boolean);
+  }
+  // 관계망에서 만든 연결 추가·삭제
+  function addRelation(fromId, toId, label) {
+    if (!fromId || !toId || fromId === toId) return false;
+    var n = entries.filter(function (x) { return x.id === fromId; })[0];
+    if (!n) return false;
+    n.relations = n.relations || [];
+    var found = null;
+    n.relations.forEach(function (r) { if (r.to === toId) found = r; });
+    if (found) found.label = label || found.label;
+    else n.relations.push({ to: toId, label: label || "" });
+    n.updatedAt = Date.now(); n._dirty = true;
+    invalidateLinks(); saveLocal(); render();
+    if (connected) syncPending();
+    return true;
+  }
+  function removeRelation(fromId, toId) {
+    var n = entries.filter(function (x) { return x.id === fromId; })[0];
+    if (!n || !n.relations) return;
+    n.relations = n.relations.filter(function (r) { return r.to !== toId; });
+    n.updatedAt = Date.now(); n._dirty = true;
+    invalidateLinks(); saveLocal(); render();
+    if (connected) syncPending();
   }
   function findByTitle(t) { return linkData().byTitle[normTitle(t)] || null; }
 
@@ -1003,7 +1192,8 @@
      ========================================================= */
   function yq(s) { return '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'; }
   function mediaPath(f) {
-    var dir = settings.useSubfolder ? ((settings.subfolderName || "자료") + "/") : "";
+    // .md 파일이 있는 위치에서 자료까지의 상대 경로
+    var dir = (settings.folderMode === "materials") ? ((settings.materialsFolderName || "자료") + "/") : "";
     var p = dir + (f.name || "");
     // 마크다운 링크 안의 공백은 <> 로 감싸야 대부분의 뷰어에서 깨지지 않는다
     return /\s/.test(p) ? "<" + p + ">" : p;
@@ -1066,6 +1256,18 @@
         if (b.url) { L.push("🔗 [" + (b.label || b.url) + "](" + b.url + ")"); L.push(""); }
       }
     });
+
+    // 관계망에서 이어준 연결 — 옵시디언에서도 링크로 읽힌다
+    var rels = (n.relations || []).map(function (r) {
+      var t = null;
+      entries.forEach(function (x) { if (x.id === r.to) t = x; });
+      return t ? { title: t.title, label: r.label || "" } : null;
+    }).filter(Boolean);
+    if (rels.length) {
+      L.push("## 연결"); L.push("");
+      rels.forEach(function (r) { L.push("- [[" + r.title + "]]" + (r.label ? " — " + r.label : "")); });
+      L.push("");
+    }
     return L.join("\n").replace(/\n{3,}/g, "\n\n");
   }
 
@@ -1086,7 +1288,10 @@
     return {
       id: n.id, type: n.type, title: n.title, tags: n.tags || [],
       blocks: (n.blocks || []).filter(function (b) { return b.kind !== "image" && b.kind !== "file" ? true : !!b.fileId; }).map(slimBlock),
-      createdAt: n.createdAt, updatedAt: n.updatedAt, mdId: n.mdId || null, mdName: n.mdName || null
+      relations: (n.relations || []).map(function (r) { return { to: r.to, label: r.label || "" }; }),
+      createdAt: n.createdAt, updatedAt: n.updatedAt,
+      mdId: n.mdId || null, mdName: n.mdName || null,
+      folderId: n.folderId || null, folderName: n.folderName || null
     };
   }
   function findIndexFile() {
@@ -1170,46 +1375,62 @@
 
   function syncPending() {
     if (!connected || !folder.id) return Promise.resolve();
-    var uploads = [];
-    entries.forEach(function (n) {
-      (n.blocks || []).forEach(function (b) {
-        if ((b.kind === "image" || b.kind === "file") && !b.fileId && b.dataUrl) uploads.push({ n: n, b: b });
+
+    // 손볼 게 있는 기록만 추린다
+    var todo = entries.filter(function (n) {
+      if (n._dirty || !n.mdId) return true;
+      return (n.blocks || []).some(function (b) {
+        return (b.kind === "image" || b.kind === "file") && !b.fileId && b.dataUrl;
       });
     });
-    var docs = entries.filter(function (n) { return n._dirty || !n.mdId; });
-    var total = uploads.length + docs.length + 1, done = 0;
+    if (!todo.length) return Promise.resolve();
+
+    var total = todo.length + 1, done = 0;
     function tick() { done++; progress(Math.round(done / total * 100)); }
 
-    return ensureSubfolder().then(function (parent) {
-      return uploads.reduce(function (p, job) {
-        return p.then(function () {
-          return uploadFile(job.b.name, job.b.mime || "application/octet-stream", b64of(job.b.dataUrl), true, null, parent)
-            .then(function (r) {
-              job.b.fileId = r.id; delete job.b.dataUrl; job.n._dirty = true;
-              idbDel(job.b.id);   // 올라갔으니 임시 보관본 삭제
-              tick();
-            })
-            .catch(function (e) { console.warn("첨부 업로드 실패", job.b.name, e); tick(); });
-        });
-      }, Promise.resolve());
-    }).then(function () {
-      return docs.reduce(function (p, n) {
-        return p.then(function () {
-          var want = mdName(n);
-          var pre = n.mdId ? Promise.resolve(want) : uniqueName(want, folder.id);
-          return pre.then(function (finalName) {
-            return uploadFile(finalName, "text/markdown", buildMarkdown(n), false, n.mdId || null, folder.id)
-              .then(function (r) { n.mdId = r.id; n.mdName = finalName; delete n._dirty; tick(); });
-          }).catch(function (e) { console.warn("md 저장 실패", n.title, e); tick(); });
-        });
-      }, Promise.resolve());
-    }).then(function () {
-      return saveIndex();
-    }).then(function () {
-      tick(); saveLocal(); render();
-    }).catch(function (e) {
-      console.warn(e); progress(0); toast("동기화 중 오류: " + e.message);
-    });
+    return todo.reduce(function (chain, n) {
+      return chain.then(function () {
+        var t;
+        return resolveTargets(n)
+          .then(function (target) {
+            t = target;
+            // 폴더가 새로 생겼거나 정리 방식을 바꿨으면 기존 파일도 옮겨 담는다
+            if (!t.created && !n._relocate) return;
+            var oldFolder = (settings.folderMode !== "perEntry") ? n.folderId : null;
+            delete n._relocate;
+            return relocateEntryFiles(n, t).then(function () {
+              if (oldFolder) { trashFile(oldFolder); n.folderId = null; n.folderName = null; }
+            });
+          })
+          .then(function () {
+            // 대기 중인 첨부 업로드
+            var pending = (n.blocks || []).filter(function (b) {
+              return (b.kind === "image" || b.kind === "file") && !b.fileId && b.dataUrl;
+            });
+            return pending.reduce(function (p, b) {
+              return p.then(function () {
+                return uploadFile(b.name, b.mime || "application/octet-stream", b64of(b.dataUrl), true, null, t.file)
+                  .then(function (r) { b.fileId = r.id; delete b.dataUrl; n._dirty = true; idbDel(b.id); })
+                  .catch(function (e) { console.warn("첨부 업로드 실패", b.name, e); });
+              });
+            }, Promise.resolve());
+          })
+          .then(function () {
+            if (!n._dirty && n.mdId) return;
+            var want = mdName(n);
+            var pre = n.mdId ? Promise.resolve(want) : uniqueName(want, t.md);
+            return pre.then(function (finalName) {
+              return uploadFile(finalName, "text/markdown", buildMarkdown(n), false, n.mdId || null, t.md)
+                .then(function (r) { n.mdId = r.id; n.mdName = finalName; delete n._dirty; });
+            });
+          })
+          .catch(function (e) { console.warn("저장 실패", n.title, e); })
+          .then(tick);
+      });
+    }, Promise.resolve())
+      .then(function () { return saveIndex(); })
+      .then(function () { tick(); saveLocal(); render(); })
+      .catch(function (e) { console.warn(e); progress(0); toast("동기화 중 오류: " + e.message); });
   }
 
   function connect(folderInputValue) {
@@ -1900,9 +2121,20 @@
         : "\n\n이 기기에서 삭제됩니다."),
       function () {
         if (connected) {
-          trashFile(n.mdId);
-          (n.blocks || []).forEach(function (b) { if (b.fileId) trashFile(b.fileId); });
+          if (n.folderId) {
+            trashFile(n.folderId);        // 기록 폴더째로 (안의 파일도 함께)
+          } else {
+            trashFile(n.mdId);
+            (n.blocks || []).forEach(function (b) { if (b.fileId) trashFile(b.fileId); });
+          }
         }
+        // 다른 기록이 걸어둔 연결도 정리
+        entries.forEach(function (x) {
+          if (!x.relations) return;
+          var before = x.relations.length;
+          x.relations = x.relations.filter(function (r) { return r.to !== id; });
+          if (x.relations.length !== before) { x.updatedAt = Date.now(); x._dirty = true; }
+        });
         (n.blocks || []).forEach(function (b) { if (!b.fileId) idbDel(b.id); });
         addTomb(id);
         entries = entries.filter(function (x) { return x.id !== id; });
@@ -2008,11 +2240,30 @@
     });
   }
 
+  function renderViewSwitch() {
+    var host = $("viewSwitch");
+    host.innerHTML = "";
+    VIEW_MODES.forEach(function (v) {
+      var b = el("button", "vbtn" + (settings.viewMode === v.key ? " on" : ""), v.icon + " " + v.label);
+      b.type = "button";
+      b.title = v.desc;
+      b.addEventListener("click", function () {
+        settings.viewMode = v.key;
+        saveSettingsLocal();
+        render();
+        saveSettingsRemote();
+      });
+      host.appendChild(b);
+    });
+  }
+
   function render() {
     invalidateLinks();
     renderFilters();
+    renderViewSwitch();
     var host = $("list");
     host.innerHTML = "";
+    host.className = "";
     var shown = entries.filter(matches);
     $("countText").textContent = entries.length
       ? (shown.length === entries.length ? entries.length + "개" : shown.length + " / " + entries.length + "개") : "";
@@ -2028,6 +2279,35 @@
       host.appendChild(e);
       return;
     }
+
+    // ---- 목록식: 제목만 한 줄씩 ----
+    if (settings.viewMode === "list") {
+      var table = el("div", "card listview");
+      shown.forEach(function (n) {
+        var t = typeOf(n.type);
+        var row = el("div", "lrow");
+        row.setAttribute("data-eid", n.id);
+        row.appendChild(el("span", "lico", t.icon));
+        var ttl = el("button", "ltitle", n.title || "(제목 없음)");
+        ttl.addEventListener("click", function () { settings.viewMode = "stream"; saveSettingsLocal(); expanded[n.id] = true; render(); gotoEntry(n.id); });
+        row.appendChild(ttl);
+        var outs = outLinks(n).filter(function (l) { return l.to; }).length;
+        var ins = backLinks(n).length;
+        if (outs || ins) row.appendChild(el("span", "lmeta", "🔗 " + outs + "/" + ins));
+        var att = (n.blocks || []).filter(function (b) { return b.kind === "image" || b.kind === "file"; }).length;
+        if (att) row.appendChild(el("span", "lmeta", "📎 " + att));
+        row.appendChild(el("span", "lwhen", formatDate(n.createdAt).slice(0, 10)));
+        var bd = el("button", "btn xs danger", "✕");
+        bd.addEventListener("click", function () { removeEntry(n.id); });
+        row.appendChild(bd);
+        table.appendChild(row);
+      });
+      host.appendChild(table);
+      return;
+    }
+
+    if (settings.viewMode === "grid") host.className = "gridview";
+    else host.className = "";
 
     shown.forEach(function (n) {
       var t = typeOf(n.type);
@@ -2064,16 +2344,16 @@
         rel.appendChild(el("div", "relhead", "🔗 연결 — 나감 " + outs.length + " · 들어옴 " + ins.length));
         var chips = el("div", "relchips");
         outs.forEach(function (l) {
-          var c = el("button", "relchip out" + (l.to ? "" : " missing"), l.title);
+          var c = el("button", "relchip out" + (l.to ? "" : " missing"), l.title + (l.label ? " · " + l.label : ""));
           c.type = "button";
           c.title = l.to ? "이동" : "아직 없는 기록 — 눌러서 만들기";
           c.addEventListener("click", function () { if (l.to) gotoEntry(l.to); else startNewFromLink(l.title); });
           chips.appendChild(c);
         });
         ins.forEach(function (x) {
-          var c = el("button", "relchip in", x.title);
+          var c = el("button", "relchip in", x.entry.title + (x.label ? " · " + x.label : ""));
           c.type = "button";
-          c.addEventListener("click", function () { gotoEntry(x.id); });
+          c.addEventListener("click", function () { gotoEntry(x.entry.id); });
           chips.appendChild(c);
         });
         rel.appendChild(chips);
@@ -2117,7 +2397,9 @@
       a.target = "_blank"; a.rel = "noopener noreferrer";
       a.style.fontWeight = "700";
       g.appendChild(a);
-      g.appendChild(document.createTextNode(" 폴더" + (settings.useSubfolder ? " (첨부는 " + settings.subfolderName + " 하위 폴더)" : "")));
+      var fmLabel = "";
+      FOLDER_MODES.forEach(function (fm) { if (fm.key === settings.folderMode) fmLabel = fm.label; });
+      g.appendChild(document.createTextNode(" 폴더 · " + fmLabel));
       g.appendChild(el("div", "mono", "글 → " + patternPreview(settings.mdPattern, true) + "   ·   자료 → " + patternPreview(settings.filePattern, false)));
       b.appendChild(g);
       var c = el("button", "btn sm", "폴더 변경");
@@ -2142,6 +2424,172 @@
   function closeModal() {
     if (modalCleanup) { try { modalCleanup(); } catch (e) {} modalCleanup = null; }
     if (modalEl) { modalEl.remove(); modalEl = null; }
+  }
+
+  /* =========================================================
+     12-0. 도움말 — 연결·백링크·관계망이 뭔지 설명
+     ========================================================= */
+  function openHelp(tab) {
+    closeModal();
+    var active = tab || "link";
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "620px";
+
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "❔ 연결 사용법"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var tabs = el("div", "tabs");
+    var body = el("div", "mbody");
+    var TABS = [["link", "① 연결이란"], ["how", "② 잇는 법"], ["back", "③ 백링크"], ["graph", "④ 관계망"]];
+    TABS.forEach(function (t) {
+      var b = el("button", "tab" + (active === t[0] ? " on" : ""), t[1]);
+      b.addEventListener("click", function () { active = t[0]; paint(); });
+      tabs.appendChild(b);
+    });
+    m.appendChild(tabs); m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    foot.appendChild(el("span", "spacer"));
+    var ok = el("button", "btn primary", "알겠습니다");
+    ok.addEventListener("click", closeModal);
+    foot.appendChild(ok);
+    m.appendChild(foot);
+
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+
+    function block(title, lines) {
+      var d = el("div", "help-block");
+      if (title) d.appendChild(el("h4", null, title));
+      lines.forEach(function (l) {
+        if (typeof l === "string") d.appendChild(el("p", null, l));
+        else d.appendChild(l);
+      });
+      body.appendChild(d);
+      return d;
+    }
+    function example(text) { return el("div", "help-ex", text); }
+
+    function paint() {
+      Array.prototype.forEach.call(tabs.children, function (b, i) {
+        b.className = "tab" + (TABS[i][0] === active ? " on" : "");
+      });
+      body.innerHTML = "";
+
+      if (active === "link") {
+        block("연결이 왜 필요한가요?", [
+          "기록이 쌓이면 검색만으로는 부족해집니다. 「지난달 그 수업에서 배운 걸 이번 수업에 썼는데, 그게 뭐였더라」 같은 게 안 잡히거든요.",
+          "그래서 기록끼리 실을 매어 둡니다. 나중에 하나를 열면 관련된 것들이 따라 나옵니다.",
+          example("물의 상태변화 수업  →  온도계 사용법  →  실험 준비 체크리스트")
+        ]);
+        block("두 가지 방법이 있습니다", [
+          "① 글을 쓰다가 자연스럽게 — 문장 안에서 다른 기록을 언급하기",
+          "② 나중에 몰아서 — 관계망 화면에서 점과 점을 이어주기",
+          "둘 다 결과는 같습니다. 편한 쪽으로 하시면 됩니다."
+        ]);
+
+      } else if (active === "how") {
+        block("① 글 쓰다가 잇기", [
+          "내용 칸에 대괄호 두 개를 칩니다.",
+          example("[[  ← 이렇게 치면 기존 기록 목록이 뜹니다"),
+          "목록에서 고르면 이렇게 들어갑니다.",
+          example("얼음 실험을 했다. [[온도계 사용법]] 을 먼저 보여줄 걸 그랬다."),
+          "저장하면 그 부분이 눌러서 이동할 수 있는 링크가 됩니다.",
+          "아직 없는 제목을 적어도 됩니다. 점선으로 표시되고, 누르면 그 제목으로 새 기록이 시작됩니다."
+        ]);
+        block("② 관계망에서 잇기", [
+          "위쪽 🕸️ 관계망 을 열고, 점을 누르면 정보 창이 뜹니다.",
+          "거기서 「🔗 다른 기록과 잇기」 를 누르고, 이을 상대 점을 누르면 끝입니다.",
+          "이때 «어떤 관계인지» 설명을 달 수 있습니다 — 「여기서 배움」, 「근거가 됨」 같은 짧은 말이면 충분합니다.",
+          "설명은 관계망의 선 위에 표시됩니다."
+        ]);
+
+      } else if (active === "back") {
+        block("백링크 = 나를 가리킨 기록", [
+          "연결에는 방향이 있습니다. A에서 B로 실을 매면,",
+          example("A →  나가는 연결  (A가 B를 가리킴)\nB ←  들어오는 연결 = 백링크  (B 입장에서)"),
+          "중요한 건 이겁니다 — B에서는 아무것도 안 했는데, B를 열면 「A가 나를 가리키고 있다」가 저절로 보입니다."
+        ]);
+        block("어디서 보나요?", [
+          "각 기록 카드 아래에 이런 줄이 붙습니다.",
+          example("🔗 연결 — 나감 2 · 들어옴 1\n   → 온도계 사용법     → 모둠 운영 원칙     ← 물의 상태변화 수업"),
+          "→ 는 내가 건 연결, ← 는 나를 가리킨 기록입니다. 눌러서 바로 이동합니다.",
+          "그래서 「온도계 사용법」 하나만 열어도, 그걸 써먹은 수업들이 전부 딸려 나옵니다. 이게 백링크가 하는 일입니다."
+        ]);
+
+      } else {
+        block("관계망 화면", [
+          "쌓인 기록이 어떻게 얽혀 있는지 한눈에 보는 곳입니다.",
+          example("● 점 = 기록 하나 (유형별로 색이 다름, 연결이 많을수록 큼)\n─▶ 실선 = 기록끼리의 연결 (화살표가 방향)\n┈ 점선 = 같은 태그를 공유 (기본 꺼짐)")
+        ]);
+        block("할 수 있는 것", [
+          "· 점을 누르면 → 정보 창이 열리고, 그 기록의 나가는 연결과 백링크가 함께 보입니다",
+          "· 정보 창의 「🔗 다른 기록과 잇기」 → 상대 점을 누르면 연결이 만들어집니다",
+          "· 연결 옆 ✕ 로 끊을 수 있습니다 (글 속 [[링크]]는 글을 고쳐야 합니다)",
+          "· 점을 끌어 옮기고, 휠로 확대·축소, 빈 곳을 끌면 화면 이동",
+          "· 빈 곳을 누르면 선택이 풀립니다"
+        ]);
+        block("드라이브에도 남습니다", [
+          "여기서 만든 연결은 각 기록의 .md 파일 «## 연결» 항목에 함께 저장됩니다.",
+          example("## 연결\n\n- [[온도계 사용법]] — 여기서 배움"),
+          "그래서 이 폴더를 옵시디언으로 열어도 링크와 그래프가 그대로 동작합니다."
+        ]);
+      }
+    }
+    paint();
+  }
+
+  // 연결에 붙일 설명을 묻는다 (취소하면 null)
+  var REL_PRESETS = ["여기서 배움", "근거가 됨", "이어지는 이야기", "반대 사례", "같은 주제", "참고 자료"];
+  function askRelationLabel(fromTitle, toTitle, done) {
+    var bg = el("div", "modal-bg"); bg.style.zIndex = 95;
+    var m = el("div", "card modal"); m.style.maxWidth = "440px";
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "🔗 어떤 관계인가요?"));
+    m.appendChild(head);
+    var body = el("div", "mbody");
+    var route = el("p", "desc");
+    route.style.margin = "0 0 12px";
+    route.innerHTML = "";
+    route.appendChild(el("b", null, fromTitle));
+    route.appendChild(document.createTextNode("  →  "));
+    route.appendChild(el("b", null, toTitle));
+    body.appendChild(route);
+    var inp = el("input", "inp");
+    inp.placeholder = "예: 여기서 배움 (비워도 됩니다)";
+    body.appendChild(inp);
+    var chips = el("div", "chips"); chips.style.marginTop = "10px";
+    REL_PRESETS.forEach(function (p) {
+      var c = el("button", "chip", p); c.type = "button";
+      c.addEventListener("click", function () { inp.value = p; inp.focus(); });
+      chips.appendChild(c);
+    });
+    body.appendChild(chips);
+    body.appendChild(el("p", "desc", "설명은 관계망의 선 위에 표시되고, 마크다운의 '## 연결' 항목에도 남습니다."));
+    m.appendChild(body);
+    var foot = el("div", "mfoot");
+    foot.appendChild(el("span", "spacer"));
+    var no = el("button", "btn", "취소");
+    var yes = el("button", "btn primary", "연결하기");
+    function close(v) { bg.remove(); done(v); }
+    no.addEventListener("click", function () { close(null); });
+    yes.addEventListener("click", function () { close(inp.value.trim()); });
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); close(inp.value.trim()); }
+      if (e.key === "Escape") { e.preventDefault(); close(null); }
+    });
+    foot.appendChild(no); foot.appendChild(yes);
+    m.appendChild(foot);
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) close(null); });
+    $("modalHost").appendChild(bg);
+    setTimeout(function () { inp.focus(); }, 30);
   }
 
   /* =========================================================
@@ -2174,11 +2622,19 @@
 
     var tools = el("div", "graphtools");
     var search = el("input", "inp"); search.placeholder = "제목 찾기";
-    var tagBtn = el("button", "btn sm", "🏷️ 태그 ON");
+    var tagBtn = el("button", "btn sm", "🏷️ 태그 OFF");
     var labelBtn = el("button", "btn sm", "🔤 이름 ON");
     var fitBtn = el("button", "btn sm", "⛶ 맞춤");
-    tools.appendChild(search); tools.appendChild(tagBtn); tools.appendChild(labelBtn); tools.appendChild(fitBtn);
+    var helpBtn = el("button", "btn sm", "❔ 사용법");
+    tools.appendChild(search); tools.appendChild(tagBtn); tools.appendChild(labelBtn);
+    tools.appendChild(fitBtn); tools.appendChild(helpBtn);
     body.appendChild(tools);
+
+    var hintBar = el("div", "graphhint hidden");
+    body.appendChild(hintBar);
+
+    var panel = el("div", "graphpanel hidden");
+    body.appendChild(panel);
 
     var legend = el("div", "graphlegend");
     body.appendChild(legend);
@@ -2200,26 +2656,32 @@
     modalEl = bg;
 
     /* ---- 그래프 데이터 ---- */
-    var showTags = true, showLabels = true, query = "";
+    var showTags = false, showLabels = true, query = "";
     var nodes = [], edges = [], byId = {}, raf = null, alive = true;
+    var selected = null, connectFrom = null, heat = 1;
 
-    function buildGraph() {
+    function buildGraph(keepPositions) {
+      var prev = {};
+      if (keepPositions) nodes.forEach(function (n) { prev[n.id] = { x: n.x, y: n.y }; });
       nodes = []; edges = []; byId = {};
       var ld = linkData();
       var w = canvas.clientWidth || 800, h = canvas.clientHeight || 500;
       entries.forEach(function (n, i) {
         var ang = i * 2.399, rad = 30 + 14 * Math.sqrt(i);
+        var p = prev[n.id];
         var node = {
           id: n.id, kind: "entry", label: n.title || "(제목 없음)", color: typeColor(n.type),
-          x: w / 2 + Math.cos(ang) * rad, y: h / 2 + Math.sin(ang) * rad, vx: 0, vy: 0, deg: 0
+          x: p ? p.x : w / 2 + Math.cos(ang) * rad,
+          y: p ? p.y : h / 2 + Math.sin(ang) * rad,
+          vx: 0, vy: 0, deg: 0
         };
         nodes.push(node); byId[n.id] = node;
       });
-      // 직접 건 [[링크]]
+      // 글 속 [[링크]] + 관계망에서 이어준 연결
       entries.forEach(function (n) {
         (ld.out[n.id] || []).forEach(function (l) {
           if (!l.to || l.to === n.id || !byId[l.to]) return;
-          edges.push({ a: byId[n.id], b: byId[l.to], kind: "link" });
+          edges.push({ a: byId[n.id], b: byId[l.to], kind: "link", label: l.label || "", via: l.via });
           byId[n.id].deg++; byId[l.to].deg++;
         });
       });
@@ -2248,11 +2710,12 @@
         });
       }
       emptyMsg.style.display = nodes.length ? "none" : "flex";
-      emptyMsg.textContent = "아직 그릴 것이 없습니다.\n글 안에서 [[ 를 쳐서 다른 기록과 연결해 보세요.";
+      emptyMsg.textContent = "아직 기록이 없습니다. 먼저 하나 써 보세요.";
       var linkCount = edges.filter(function (e) { return e.kind === "link"; }).length;
-      stat.textContent = "기록 " + entries.length + "개 · 직접 연결 " + linkCount + "개" +
+      stat.textContent = "기록 " + entries.length + "개 · 연결 " + linkCount + "개" +
         (showTags ? " · 태그 연결 " + (edges.length - linkCount) + "개" : "");
       paintLegend();
+      heat = 1;   // 배치를 다시 데운다
     }
 
     function paintLegend() {
@@ -2305,9 +2768,11 @@
         n.vy += (cy - n.y) * 0.0016;
         if (n === dragNode) { n.vx = 0; n.vy = 0; return; }
         n.vx *= 0.85; n.vy *= 0.85;
-        n.x += Math.max(-12, Math.min(12, n.vx));
-        n.y += Math.max(-12, Math.min(12, n.vy));
+        // heat 가 식으면 움직임이 잦아들어 자리를 잡는다 (계속 흔들리지 않게)
+        n.x += Math.max(-12, Math.min(12, n.vx * heat));
+        n.y += Math.max(-12, Math.min(12, n.vy * heat));
       });
+      if (!dragNode && heat > 0.02) heat *= 0.985;
     }
 
     /* ---- 그리기 ---- */
@@ -2338,32 +2803,89 @@
       var hi = {};
       if (q) nodes.forEach(function (n) { if (normTitle(n.label).indexOf(q) >= 0) hi[n.id] = 1; });
 
+      function radiusOf(n) { return (n.kind === "tag" ? 4 : 6) + Math.min(9, n.deg * 1.3); }
+      // 선택한 점과 이웃을 강조
+      var near = {};
+      if (selected) {
+        near[selected.id] = 1;
+        edges.forEach(function (e) {
+          if (e.a.id === selected.id) near[e.b.id] = 1;
+          if (e.b.id === selected.id) near[e.a.id] = 1;
+        });
+      }
+
       edges.forEach(function (e) {
-        var dim = q && !hi[e.a.id] && !hi[e.b.id];
-        ctx.strokeStyle = e.kind === "tag" ? "rgba(148,163,184,.35)" : "rgba(120,140,190,.55)";
+        var touched = selected && (e.a.id === selected.id || e.b.id === selected.id);
+        var dim = (q && !hi[e.a.id] && !hi[e.b.id]) || (selected && !touched);
+        ctx.strokeStyle = e.kind === "tag" ? "rgba(148,163,184,.35)" : (touched ? "#2f5fd6" : "rgba(120,140,190,.55)");
         if (dim) ctx.strokeStyle = "rgba(150,150,160,.12)";
-        ctx.lineWidth = (e.kind === "tag" ? 1 : 1.6) / scale * 1;
+        ctx.lineWidth = ((e.kind === "tag" ? 1 : (touched ? 2.4 : 1.6))) / scale;
         if (e.kind === "tag") ctx.setLineDash([4 / scale, 4 / scale]); else ctx.setLineDash([]);
+
+        var dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
+        var len = Math.sqrt(dx * dx + dy * dy) || 1;
+        var ux = dx / len, uy = dy / len;
+        var rb = radiusOf(e.b) + 2;
+        var ex = e.b.x - ux * rb, ey = e.b.y - uy * rb;   // 화살촉이 점에 닿지 않게
+
         ctx.beginPath();
         ctx.moveTo(e.a.x, e.a.y);
-        ctx.lineTo(e.b.x, e.b.y);
+        ctx.lineTo(ex, ey);
         ctx.stroke();
+
+        // 방향 화살촉 (기록끼리의 연결만)
+        if (e.kind === "link" && !dim && scale > 0.4) {
+          var ah = 7 / scale, aw = 4 / scale;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - ux * ah - uy * aw, ey - uy * ah + ux * aw);
+          ctx.lineTo(ex - ux * ah + uy * aw, ey - uy * ah - ux * aw);
+          ctx.closePath();
+          ctx.fillStyle = ctx.strokeStyle;
+          ctx.fill();
+        }
+        // 연결에 붙인 설명
+        if (e.label && !dim && scale > 0.7) {
+          var mx = (e.a.x + ex) / 2, my = (e.a.y + ey) / 2;
+          ctx.setLineDash([]);
+          ctx.font = (10.5 / 1) + "px system-ui, sans-serif";
+          ctx.textAlign = "center";
+          var txt = e.label.length > 14 ? e.label.slice(0, 13) + "…" : e.label;
+          var tw = ctx.measureText(txt).width + 8 / scale;
+          ctx.fillStyle = css.getPropertyValue("background-color") || "#fff";
+          ctx.globalAlpha = 0.92;
+          ctx.fillRect(mx - tw / 2, my - 8 / scale, tw, 15 / scale);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = "#2f5fd6";
+          ctx.fillText(txt, mx, my + 4 / scale);
+        }
       });
       ctx.setLineDash([]);
 
       nodes.forEach(function (n) {
-        var r = (n.kind === "tag" ? 4 : 6) + Math.min(9, n.deg * 1.3);
-        var dim = q && !hi[n.id];
-        ctx.globalAlpha = dim ? 0.22 : 1;
+        var r = radiusOf(n);
+        var dim = (q && !hi[n.id]) || (selected && !near[n.id]);
+        ctx.globalAlpha = dim ? 0.18 : 1;
         ctx.beginPath();
         ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
         ctx.fillStyle = n.color;
         ctx.fill();
-        if (hi[n.id]) {
+        if (selected && n.id === selected.id) {
+          ctx.lineWidth = 3 / scale; ctx.strokeStyle = "#111827"; ctx.stroke();
+          ctx.beginPath(); ctx.arc(n.x, n.y, r + 6 / scale, 0, Math.PI * 2);
+          ctx.lineWidth = 1.5 / scale; ctx.strokeStyle = "#2f5fd6"; ctx.stroke();
+        } else if (hi[n.id]) {
           ctx.lineWidth = 3 / scale; ctx.strokeStyle = "#f59e0b"; ctx.stroke();
         }
+        if (connectFrom && n.id === connectFrom.id) {
+          ctx.beginPath(); ctx.arc(n.x, n.y, r + 9 / scale, 0, Math.PI * 2);
+          ctx.setLineDash([3 / scale, 3 / scale]);
+          ctx.lineWidth = 2 / scale; ctx.strokeStyle = "#1a9e5f"; ctx.stroke();
+          ctx.setLineDash([]);
+        }
         if (showLabels && scale > 0.55) {
-          ctx.globalAlpha = dim ? 0.25 : 0.92;
+          ctx.globalAlpha = dim ? 0.2 : 0.92;
           ctx.fillStyle = css.color;
           ctx.font = (n.kind === "tag" ? 11 : 12) + "px system-ui, sans-serif";
           ctx.textAlign = "center";
@@ -2425,8 +2947,13 @@
       window.removeEventListener("touchend", up);
       if (dragNode && moved < 6) {
         var n = dragNode;
-        if (n.kind === "entry") gotoEntry(n.id);
-        else { query = n.label.replace(/^#/, ""); search.value = query; }
+        if (n.kind !== "entry") { query = n.label.replace(/^#/, ""); search.value = query; }
+        else if (connectFrom && connectFrom.id !== n.id) { finishConnect(n); }
+        else if (connectFrom && connectFrom.id === n.id) { cancelConnect(); }
+        else { selectNode(n); }
+      } else if (!dragNode && moved < 6) {
+        // 빈 곳을 누르면 선택 해제
+        if (connectFrom) cancelConnect(); else selectNode(null);
       }
       dragNode = null; panning = false; downPt = null;
     }
@@ -2442,6 +2969,109 @@
       panY = my - (my - panY) * (ns / scale);
       scale = ns;
     }, { passive: false });
+
+    /* ---- 점을 누르면 뜨는 정보 패널 ---- */
+    function entryOf(id) { return entries.filter(function (x) { return x.id === id; })[0]; }
+
+    function selectNode(node) {
+      selected = node;
+      if (!node) { panel.classList.add("hidden"); return; }
+      var n = entryOf(node.id);
+      if (!n) { panel.classList.add("hidden"); return; }
+      var t = typeOf(n.type);
+      panel.innerHTML = "";
+
+      var head = el("div", "gp-head");
+      head.appendChild(el("span", "badge", t.icon + " " + t.label));
+      head.appendChild(el("span", "spacer"));
+      var close = el("button", "btn xs ghost", "✕");
+      close.addEventListener("click", function () { selectNode(null); });
+      head.appendChild(close);
+      panel.appendChild(head);
+
+      panel.appendChild(el("h4", "gp-title", n.title || "(제목 없음)"));
+      panel.appendChild(el("div", "gp-when", formatDate(n.createdAt)));
+
+      var preview = "";
+      (n.blocks || []).forEach(function (b) {
+        if (preview.length > 90) return;
+        if (b.kind === "text" || b.kind === "quote") preview += (b.text || "") + " ";
+      });
+      if (preview.trim()) panel.appendChild(el("p", "gp-preview", preview.trim().slice(0, 100)));
+
+      var outs = outLinks(n).filter(function (l) { return l.to; });
+      var ins = backLinks(n);
+
+      var sec = el("div", "gp-sec");
+      sec.appendChild(el("div", "gp-lab", "→ 이 기록이 가리키는 것 (" + outs.length + ")"));
+      if (!outs.length) sec.appendChild(el("div", "gp-none", "없음"));
+      outs.forEach(function (l) {
+        var row = el("div", "gp-row");
+        var go = el("button", "gp-go", l.title + (l.label ? "  · " + l.label : ""));
+        go.addEventListener("click", function () { var t2 = byId[l.to]; if (t2) selectNode(t2); });
+        row.appendChild(go);
+        if (l.via !== "text") {
+          var rm = el("button", "btn xs danger", "✕");
+          rm.title = "연결 끊기";
+          rm.addEventListener("click", function () {
+            removeRelation(n.id, l.to);
+            buildGraph(true); selectNode(byId[n.id]);
+          });
+          row.appendChild(rm);
+        } else {
+          var tag = el("span", "gp-via", "글 속 [[링크]]");
+          row.appendChild(tag);
+        }
+        sec.appendChild(row);
+      });
+      panel.appendChild(sec);
+
+      var sec2 = el("div", "gp-sec");
+      sec2.appendChild(el("div", "gp-lab", "← 이 기록을 가리키는 것 · 백링크 (" + ins.length + ")"));
+      if (!ins.length) sec2.appendChild(el("div", "gp-none", "아직 없음"));
+      ins.forEach(function (x) {
+        var row = el("div", "gp-row");
+        var go = el("button", "gp-go", x.entry.title + (x.label ? "  · " + x.label : ""));
+        go.addEventListener("click", function () { var t3 = byId[x.entry.id]; if (t3) selectNode(t3); });
+        row.appendChild(go);
+        sec2.appendChild(row);
+      });
+      panel.appendChild(sec2);
+
+      var acts = el("div", "gp-acts");
+      var bConn = el("button", "btn sm primary", "🔗 다른 기록과 잇기");
+      bConn.addEventListener("click", function () { startConnect(node); });
+      var bOpen = el("button", "btn sm", "기록 열기");
+      bOpen.addEventListener("click", function () { gotoEntry(n.id); });
+      acts.appendChild(bConn); acts.appendChild(bOpen);
+      panel.appendChild(acts);
+
+      panel.classList.remove("hidden");
+    }
+
+    function startConnect(node) {
+      connectFrom = node;
+      hintBar.textContent = "「" + node.label + "」 에서 이을 상대를 고르세요 — 다른 점을 누르면 연결됩니다. (취소: 빈 곳 누르기)";
+      hintBar.classList.remove("hidden");
+      panel.classList.add("hidden");
+    }
+    function cancelConnect() {
+      connectFrom = null;
+      hintBar.classList.add("hidden");
+      if (selected) selectNode(selected);
+    }
+    function finishConnect(target) {
+      var from = connectFrom;
+      connectFrom = null;
+      hintBar.classList.add("hidden");
+      askRelationLabel(from.label, target.label, function (label) {
+        if (label === null) { selectNode(from); return; }
+        addRelation(from.id, target.id, label);
+        buildGraph(true);
+        selectNode(byId[from.id]);
+        toast("「" + from.label + "」 → 「" + target.label + "」 연결했습니다.");
+      });
+    }
 
     function fit() {
       if (!nodes.length) return;
@@ -2461,10 +3091,11 @@
     }
 
     search.addEventListener("input", function () { query = this.value.trim(); });
+    helpBtn.addEventListener("click", function () { openHelp("graph"); });
     tagBtn.addEventListener("click", function () {
       showTags = !showTags;
       tagBtn.textContent = showTags ? "🏷️ 태그 ON" : "🏷️ 태그 OFF";
-      buildGraph();
+      buildGraph(true);
     });
     labelBtn.addEventListener("click", function () {
       showLabels = !showLabels;
@@ -2546,7 +3177,7 @@
     save.addEventListener("click", function () {
       settings = normalizeSettings(draft);
       saveSettingsLocal();
-      subFolderId = null;
+      subFolderId = null; folderCache = {};
       if (!settings.types.some(function (t) { return t.key === currentType; })) currentType = settings.types[0].key;
       renderTypeChips(); renderBlocks(); render(); updateChrome();
       saveSettingsRemote();
@@ -2611,19 +3242,47 @@
       body.appendChild(f2);
 
       var f3 = el("div", "field");
-      var lab = el("label", null, "3단계 · 첨부 자료 위치");
-      f3.appendChild(lab);
-      var sw = el("label"); sw.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13.5px;";
-      var cb = el("input"); cb.type = "checkbox"; cb.checked = !!draft.useSubfolder;
-      var nmi = el("input", "inp"); nmi.style.cssText = "width:130px;"; nmi.value = draft.subfolderName || "자료";
-      nmi.disabled = !cb.checked;
-      cb.addEventListener("change", function () { draft.useSubfolder = cb.checked; nmi.disabled = !cb.checked; });
-      nmi.addEventListener("input", function () { draft.subfolderName = nmi.value; });
-      sw.appendChild(cb);
-      sw.appendChild(document.createTextNode("사진·파일은 하위 폴더에 따로 모으기 →"));
-      sw.appendChild(nmi);
-      f3.appendChild(sw);
-      f3.appendChild(el("p", "desc", "끄면 .md 파일과 자료가 같은 폴더에 나란히 저장됩니다."));
+      f3.appendChild(el("label", null, "3단계 · 폴더 정리 방식"));
+      var sel3 = el("select", "inp");
+      FOLDER_MODES.forEach(function (fm) {
+        var o = el("option", null, fm.label + " — " + fm.desc);
+        o.value = fm.key;
+        sel3.appendChild(o);
+      });
+      sel3.value = draft.folderMode;
+      var d3 = el("p", "desc");
+      function paintMode() {
+        var ex = {
+          perEntry: "내 폴더/\n └ 2026-08-16_경험_수업회고/\n     ├ 2026-08-16_경험_수업회고.md\n     └ 2026-08-16_수업회고_01.png",
+          materials: "내 폴더/\n ├ 2026-08-16_경험_수업회고.md\n └ 자료/\n     └ 2026-08-16_수업회고_01.png",
+          monthly: "내 폴더/\n └ 2026-08/\n     ├ 2026-08-16_경험_수업회고.md\n     └ 2026-08-16_수업회고_01.png",
+          flat: "내 폴더/\n ├ 2026-08-16_경험_수업회고.md\n └ 2026-08-16_수업회고_01.png"
+        }[draft.folderMode] || "";
+        d3.textContent = ex;
+        d3.style.whiteSpace = "pre";
+        d3.style.fontFamily = "ui-monospace, Consolas, monospace";
+        d3.style.background = "var(--bg)";
+        d3.style.border = "1px solid var(--line)";
+        d3.style.borderRadius = "9px";
+        d3.style.padding = "10px 12px";
+        d3.style.overflowX = "auto";
+      }
+      sel3.addEventListener("change", function () { draft.folderMode = sel3.value; paintMode(); });
+      paintMode();
+      f3.appendChild(sel3);
+      f3.appendChild(d3);
+      f3.appendChild(el("p", "desc",
+        "방식을 바꾸면 앞으로 저장되는 것부터 적용됩니다. 이미 올라간 파일을 옮기려면 아래 버튼을 쓰세요."));
+      var reorg = el("button", "btn sm", "기존 파일도 새 방식으로 옮기기");
+      reorg.disabled = !connected;
+      reorg.addEventListener("click", function () {
+        settings = normalizeSettings(draft);
+        saveSettingsLocal();
+        entries.forEach(function (n) { n._relocate = true; n._dirty = true; });
+        status.textContent = "옮기는 중…";
+        syncPending().then(function () { status.textContent = "정리했습니다."; updateChrome(); });
+      });
+      f3.appendChild(reorg);
       body.appendChild(f3);
 
       var f4 = el("div", "field");
@@ -2802,6 +3461,7 @@
      ========================================================= */
   $("btnSettings").addEventListener("click", function () { openSettings("storage"); });
   $("btnGraph").addEventListener("click", openGraph);
+  $("btnHelp").addEventListener("click", function () { openHelp("link"); });
   $("btnLogin").addEventListener("click", function () {
     if (connected) { autoSync(true).then(function () { toast("동기화했습니다."); }); return; }
     if (folder.id) { connect(""); return; }
