@@ -1523,8 +1523,11 @@
 
   /* 블록 → 마크다운 본문 줄들. h 는 소제목 단계(2 = "##").
      기록 한 편을 그대로 뽑을 때와, 여러 편을 한 권으로 엮을 때 같이 쓴다. */
-  function blocksToMarkdown(n, h) {
+  // base: 사진·첨부의 상대경로 앞에 붙일 폴더 (엮어내기에서 쓴다).
+  // 한 편짜리 .md 는 자료와 같은 폴더에 있으므로 base 없이 파일 이름만 쓴다.
+  function blocksToMarkdown(n, h, base) {
     var hh = new Array((h || 2) + 1).join("#");
+    var pre = base || "";
     var L = [];
     (n.blocks || []).forEach(function (b) {
       if (b.kind === "text") {
@@ -1539,12 +1542,12 @@
       } else if (b.kind === "divider") {
         L.push("---"); L.push("");
       } else if (b.kind === "image") {
-        L.push("![" + (b.caption || b.original || "") + "](" + mediaPath(b) + ")");
+        L.push("![" + (b.caption || b.original || "") + "](" + pre + mediaPath(b) + ")");
         if (b.caption) L.push("*" + b.caption + "*");
         if (b.fileId) L.push("<!-- drive: " + driveLink(b.fileId) + " -->");
         L.push("");
       } else if (b.kind === "file") {
-        var line = "📎 [" + (b.caption || b.name || b.original) + "](" + (b.fileId ? driveLink(b.fileId) : mediaPath(b)) + ")";
+        var line = "📎 [" + (b.caption || b.name || b.original) + "](" + (b.fileId ? driveLink(b.fileId) : pre + mediaPath(b)) + ")";
         if (b.original && b.name && b.original !== b.name) line += " <!-- 원본: " + b.original + " -->";
         L.push(line); L.push("");
       } else if (b.kind === "link") {
@@ -3635,7 +3638,10 @@
       if ((n.tags || []).length) meta.push(n.tags.map(function (x) { return "#" + x; }).join(" "));
       L.push("*" + meta.join("  ·  ") + "*");
       L.push("");
-      blocksToMarkdown(n, 3).forEach(function (line) { L.push(line); });
+      // 엮은 책은 «연결 폴더 바로 아래» 에 두고 보는 것을 기준으로 삼는다.
+      // 기록마다 폴더를 쓰는 설정이면 사진이 그 하위 폴더에 있으므로 폴더 이름을 앞에 붙인다.
+      // 안 붙이면 한 파일 안에서 편마다 기준 폴더가 달라져 사진이 깨진다.
+      blocksToMarkdown(n, 3, n.folderName ? n.folderName + "/" : "").forEach(function (line) { L.push(line); });
 
       if (o.links) {
         var outs = outLinks(n).filter(function (l) { return l.to; });
