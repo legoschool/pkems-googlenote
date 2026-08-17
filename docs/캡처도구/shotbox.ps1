@@ -41,6 +41,33 @@ public class Win {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e);
+
+  // Get-Process only exposes ONE window per process (MainWindowTitle), so with
+  // two Chrome windows open -Front would raise the wrong one and we would
+  // screenshot a page the browser tools are not driving. Walk every top-level
+  // window instead and match on its own title.
+  public delegate bool EnumProc(IntPtr h, IntPtr p);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr p);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder s, int n);
+
+  public static IntPtr FindByTitle(string needle) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows(delegate(IntPtr h, IntPtr p) {
+      if (!IsWindowVisible(h)) return true;
+      var sb = new System.Text.StringBuilder(512);
+      GetWindowTextW(h, sb, sb.Capacity);
+      string t = sb.ToString();
+      if (t.Length > 0 && t.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0) { found = h; return false; }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+  public static string TitleOf(IntPtr h) {
+    var sb = new System.Text.StringBuilder(512);
+    GetWindowTextW(h, sb, sb.Capacity);
+    return sb.ToString();
+  }
 }
 "@
 
@@ -72,6 +99,14 @@ function Invoke-DismissBar {
   if ($t.present) {
     [void][Win]::SetCursorPos($BAR_CLOSE[0], $BAR_CLOSE[1])
     Start-Sleep -Milliseconds 150
+    # Check again with the pointer already parked. The bar can vanish on its
+    # own in that gap, and then this click lands on the console's account
+    # avatar and opens a menu showing the account name and email.
+    if (-not (Test-InfoBar).present) {
+      [void][Win]::SetCursorPos(20, 1570)
+      Write-Host "info bar went away before the click - not clicking"
+      return
+    }
     [Win]::mouse_event(0x0002, 0, 0, 0, [IntPtr]::Zero)
     Start-Sleep -Milliseconds 60
     [Win]::mouse_event(0x0004, 0, 0, 0, [IntPtr]::Zero)
@@ -91,15 +126,14 @@ function Invoke-DismissBar {
 
 # --- bring a window to the front -------------------------------------------
 if ($Front -ne "") {
-  $p = Get-Process | Where-Object {
-        $_.MainWindowTitle -and $_.MainWindowTitle -like "*$Front*" } |
-       Select-Object -First 1
-  if ($p) {
-    [void][Win]::ShowWindow($p.MainWindowHandle, 9)   # SW_RESTORE
-    [void][Win]::SetForegroundWindow($p.MainWindowHandle)
-    Start-Sleep -Milliseconds 350
+  $hwnd = [Win]::FindByTitle($Front)
+  if ($hwnd -ne [IntPtr]::Zero) {
+    [void][Win]::ShowWindow($hwnd, 9)   # SW_RESTORE
+    [void][Win]::SetForegroundWindow($hwnd)
+    Start-Sleep -Milliseconds 450
+    Write-Host ("front: {0}" -f [Win]::TitleOf($hwnd))
   } else {
-    Write-Host "front window not found: $Front"
+    throw "front window not found: $Front"
   }
 }
 
