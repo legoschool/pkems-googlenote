@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="description" content="글·사진·링크·파일을 블로그처럼 이어 쓰고, 내 구글 드라이브 폴더에 마크다운으로 쌓는 개인 지식·경험 기록장(PKEMS)" />
 <meta name="theme-color" content="#2f5fd6" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="기록장" />
 <title>PKEMS · 개인 지식·경험 기록장</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -581,6 +587,7 @@
     <span id="syncPill" class="syncpill"></span>
     <span id="acct" class="acct"></span>
     <button id="btnHelp" class="btn sm" title="연결·백링크·관계망 사용법">❔</button>
+    <button id="btnInstall" class="btn sm" style="display:none" title="이 기록장을 내 컴퓨터에 앱으로 설치합니다">⬇ 앱으로 설치</button>
     <button id="btnGraph" class="btn sm">🕸️ 관계망</button>
     <button id="btnSettings" class="btn sm">⚙️ 설정</button>
     <button id="btnLogin" class="btn sm primary">구글 로그인</button>
@@ -5529,6 +5536,36 @@
   updateChrome();
   rehydratePending();   // 지난번에 못 올린 사진·파일 되살리기
   restoreDraft();   // 쓰다 만 내용 되살리기
+
+  /* ---------- 앱으로 설치 (PWA) ----------
+     서비스 워커는 index.html 을 캐시하지 않는다. 고치면 바로 반영돼야 하기 때문. */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () { /* 설치 안 돼도 앱은 그대로 쓴다 */ });
+    });
+  }
+  (function () {
+    var btn = $("btnInstall");
+    if (!btn) return;
+    var prompt = null;
+    // 이미 앱으로 열려 있으면 버튼을 보일 이유가 없다
+    var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    window.addEventListener("beforeinstallprompt", function (e) {
+      if (standalone) return;
+      e.preventDefault();
+      prompt = e;
+      btn.style.display = "";
+    });
+    btn.addEventListener("click", function () {
+      if (!prompt) return;
+      prompt.prompt();
+      prompt.userChoice.then(function () { prompt = null; btn.style.display = "none"; });
+    });
+    window.addEventListener("appinstalled", function () {
+      prompt = null; btn.style.display = "none";
+      toast("앱으로 설치했습니다. 바탕화면에서 열 수 있습니다.");
+    });
+  })();
 
   // 기기에 맞는 버튼 이름
   (function () {
