@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="description" content="글·사진·링크·파일을 블로그처럼 이어 쓰고, 내 구글 드라이브 폴더에 마크다운으로 쌓는 개인 지식·경험 기록장(PKEMS)" />
+<meta name="description" content="글·사진·링크·파일을 블로그처럼 이어 쓰고, 내 구글 드라이브 폴더에 마크다운으로 쌓는 개인 지식·경험 기록장 PEER" />
 <meta name="theme-color" content="#2f5fd6" />
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="기록장" />
-<title>PKEMS · 개인 지식·경험 기록장</title>
+<title>PEER · 개인 지식·경험 기록장</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
@@ -649,7 +649,7 @@
 
 <header class="top">
   <div class="top-inner">
-    <div class="logo">🧠 PKEMS <small>개인 지식·경험 기록장</small></div>
+    <div class="logo">🤝 PEER <small>내 지식과 경험이 동료가 된다</small></div>
     <div class="spacer"></div>
     <span id="syncPill" class="syncpill"></span>
     <span id="acct" class="acct"></span>
@@ -737,7 +737,7 @@
   <div id="list"></div>
 
   <footer class="site">
-    PKEMS · 개인 지식·경험 관리 체계 &nbsp;|&nbsp; <a href="privacy.html">개인정보처리방침</a>
+    PEER · Personal Experience, Evidence &amp; Record &nbsp;|&nbsp; <a href="privacy.html">개인정보처리방침</a>
   </footer>
 </div>
 
@@ -766,8 +766,14 @@
   // 사용자가 임의의 폴더 ID/링크를 지정하므로 전체 drive 스코프가 필요합니다.
   var SCOPE = "openid email https://www.googleapis.com/auth/drive";
 
-  var INDEX_NAME = "PKEMS-index.json";
-  var SETTINGS_NAME = "PKEMS-settings.json";
+  /* 이름을 PKEMS 에서 PEER 로 바꿨다.
+     ⚠️ 드라이브에 이미 «PKEMS-index.json» 을 쓰고 있는 사람이 있다.
+        새 이름으로 파일을 «새로 만들면» 그 사람의 기록이 통째로 안 보이게 된다.
+        그래서 옛 이름도 함께 찾고, 찾으면 «파일 ID 는 그대로 둔 채 이름만» 바꾼다. */
+  var INDEX_NAME = "PEER-index.json";
+  var SETTINGS_NAME = "PEER-settings.json";
+  var OLD_INDEX_NAME = "PKEMS-index.json";
+  var OLD_SETTINGS_NAME = "PKEMS-settings.json";
   var MAX_FILE_MB = 200;
   var RESUMABLE_CHUNK = 8 * 1024 * 1024;   // PC 는 8MB 씩 끊어서 올린다
   var MOBILE_CHUNK = 2 * 1024 * 1024;      // 폰은 2MB — 신호가 나쁠 때 되돌아갈 거리를 줄인다
@@ -831,16 +837,32 @@
   var TOKENS = ["{폴더명}", "{하위폴더}", "{날짜}", "{시간}", "{유형}", "{제목}", "{번호}", "{원본이름}", "{확장자}"];
 
   var LS = {
-    entries: "pkems.entries.v2",
-    settings: "pkems.settings.v1",
-    tombs: "pkems.tombstones.v1",
-    draft: "pkems.draft.v1",
-    folder: "pkems.folder",
-    cid: "pkems.clientId",
-    connected: "pkems.connected",
-    token: "pkems.token.v1",     // 새로고침해도 로그인이 안 풀리게 (만료시각까지만)
-    email: "pkems.email"         // 다시 받을 때 계정 고르는 화면을 건너뛰려고
+    entries: "peer.entries.v2",
+    settings: "peer.settings.v1",
+    tombs: "peer.tombstones.v1",
+    draft: "peer.draft.v1",
+    folder: "peer.folder",
+    cid: "peer.clientId",
+    connected: "peer.connected",
+    token: "peer.token.v1",     // 새로고침해도 로그인이 안 풀리게 (만료시각까지만)
+    email: "peer.email"         // 다시 받을 때 계정 고르는 화면을 건너뛰려고
   };
+
+  /* ---- 옛 이름(pkems.…)으로 브라우저에 남아 있는 것 이어받기 ----
+     이름을 바꾸는 순간, 쓰던 사람의 기록·설정·쓰다 만 글이 «없는 것»이 된다.
+     그래서 새 이름이 비어 있고 옛 이름에 값이 있으면 옮겨 담는다.
+     ⚠️ 옛 것은 지우지 않는다. 옛 버전으로 되돌아가야 할 일이 생길 수 있다. */
+  (function inheritOldKeys() {
+    try {
+      Object.keys(LS).forEach(function (k) {
+        var now = LS[k], was = now.replace(/^peer\./, "pkems.");
+        if (localStorage.getItem(now) === null) {
+          var v = localStorage.getItem(was);
+          if (v !== null) localStorage.setItem(now, v);
+        }
+      });
+    } catch (e) { /* 저장소가 막혀 있어도 앱은 그대로 쓴다 */ }
+  })();
   var TOMB_KEEP_DAYS = 120;
 
   /* =========================================================
@@ -986,6 +1008,8 @@
   function idb() {
     return new Promise(function (res, rej) {
       if (!idbOK || !window.indexedDB) { rej(new Error("no-idb")); return; }
+      // ⚠️ 이름은 옛것(pkems)으로 둔다. 여기엔 «아직 못 올린 사진·파일»이 들어 있어서,
+      //    이름을 바꾸면 그것들이 통째로 사라진다. 화면에 보이지 않는 이름이라 그대로 둔다.
       var r = indexedDB.open("pkems", 1);
       r.onupgradeneeded = function () { r.result.createObjectStore("pending"); };
       r.onsuccess = function () { res(r.result); };
@@ -1370,7 +1394,7 @@
   // 예: 구글 문서로 변환 저장 → mimeType=google-apps.document, mediaType=text/html
   function uploadFile(name, mimeType, payload, isBase64, fileId, parentId, mediaType) {
     var media = mediaType || mimeType;
-    var boundary = "pkems" + Math.random().toString(36).slice(2);
+    var boundary = "peer" + Math.random().toString(36).slice(2);
     var d = "\r\n--" + boundary + "\r\n", c = "\r\n--" + boundary + "--";
     var meta = fileId ? { name: name } : { name: name, mimeType: mimeType, parents: [parentId || folder.id] };
     var body = d + "Content-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(meta) +
@@ -2149,14 +2173,35 @@
       shareFolderUrl: n.shareFolderUrl || null
     };
   }
+  /* ---- 옛 이름(PKEMS-…)으로 남아 있는 파일 이어받기 ----
+     새로 만들지 않는다. 이미 있는 파일의 «이름만» 바꾼다.
+     파일 ID 가 그대로라 안에 든 것은 한 글자도 안 움직인다.
+     이름 바꾸기가 실패해도 그 파일을 그대로 쓴다 — 기록을 못 보는 일은 없어야 한다. */
+  function renameFile(id, name) {
+    return driveJson("https://www.googleapis.com/drive/v3/files/" + id + "?fields=id&supportsAllDrives=true", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name })
+    }).catch(function () { return null; });
+  }
+  function findOrInherit(newName, oldName) {
+    return findInFolder(newName, folder.id).then(function (id) {
+      if (id) return id;
+      return findInFolder(oldName, folder.id).then(function (oldId) {
+        if (!oldId) return null;
+        console.info("옛 이름 " + oldName + " 을 " + newName + " 으로 이어받습니다.");
+        return renameFile(oldId, newName).then(function () { return oldId; });
+      });
+    });
+  }
+
   function findIndexFile() {
     if (indexFileId) return Promise.resolve(indexFileId);
-    return findInFolder(INDEX_NAME, folder.id).then(function (id) { indexFileId = id; return id; });
+    return findOrInherit(INDEX_NAME, OLD_INDEX_NAME).then(function (id) { indexFileId = id; return id; });
   }
   function saveIndex() {
     pruneTombs();
     var content = JSON.stringify(
-      { version: 3, app: "PKEMS", entries: entries.map(slim), deleted: tombstones }, null, 2);
+      { version: 3, app: "PEER", entries: entries.map(slim), deleted: tombstones }, null, 2);
     return findIndexFile().then(function (id) {
       return uploadFile(INDEX_NAME, "application/json", content, false, id, folder.id);
     }).then(function (r) { if (r && r.id) indexFileId = r.id; });
@@ -2191,14 +2236,14 @@
   function saveSettingsRemote() {
     if (!connected || !folder.id) return Promise.resolve();
     var content = JSON.stringify(settings, null, 2);
-    var p = settingsFileId ? Promise.resolve(settingsFileId) : findInFolder(SETTINGS_NAME, folder.id);
+    var p = settingsFileId ? Promise.resolve(settingsFileId) : findOrInherit(SETTINGS_NAME, OLD_SETTINGS_NAME);
     return p.then(function (id) {
       settingsFileId = id;
       return uploadFile(SETTINGS_NAME, "application/json", content, false, id, folder.id);
     }).then(function (r) { if (r && r.id) settingsFileId = r.id; }).catch(function () {});
   }
   function loadSettingsRemote() {
-    return findInFolder(SETTINGS_NAME, folder.id).then(function (id) {
+    return findOrInherit(SETTINGS_NAME, OLD_SETTINGS_NAME).then(function (id) {
       if (!id) return null;
       settingsFileId = id;
       return driveFetch("https://www.googleapis.com/drive/v3/files/" + id + "?alt=media&supportsAllDrives=true")
@@ -5096,7 +5141,7 @@
     L.push("");
     var sub = ["기록 " + list.length + "편"];
     var range = bookRange(list); if (range) sub.push(range);
-    sub.push("PKEMS 로 엮음 · " + dateStamp());
+    sub.push("PEER 로 엮음 · " + dateStamp());
     L.push("> " + sub.join(" · "));
     L.push("");
 
@@ -5149,7 +5194,7 @@
     H.push('<h1 class="booktitle">' + esc(o.title || "기록 모음") + "</h1>");
     var sub = ["기록 " + list.length + "편"];
     var range = bookRange(list); if (range) sub.push(range);
-    sub.push("PKEMS 로 엮음 · " + dateStamp());
+    sub.push("PEER 로 엮음 · " + dateStamp());
     H.push('<p class="booksub">' + esc(sub.join("  ·  ")) + "</p>");
 
     if (o.toc) {
@@ -5818,7 +5863,7 @@
        ② 💻 즐겨찾기 한 줄(북마클릿) → 주소 뒤 #capture= 에 담겨 온다
      둘 다 «쓰던 글에 이어 붙인다». 덮어쓰지 않는다.
      ========================================================= */
-  var SHARE_CACHE = "pkems-share-inbox";
+  var SHARE_CACHE = "peer-share-inbox";
 
   function urlHost(u) {
     try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
@@ -7212,7 +7257,7 @@
       var fImp = el("div", "field");
       fImp.appendChild(el("label", null, "폴더에 있는데 목록에 없는 것 가져오기"));
       fImp.appendChild(el("p", "desc",
-        "이 앱은 색인 파일(PKEMS-index.json)을 보고 목록을 만듭니다. 그래서 옵시디언에서 만든 노트나 " +
+        "이 앱은 색인 파일(PEER-index.json)을 보고 목록을 만듭니다. 그래서 옵시디언에서 만든 노트나 " +
         "드라이브에 직접 넣은 .md 파일은 목록에 안 보입니다. 아래 버튼을 누르면 폴더를 훑어서 " +
         "그런 파일들을 찾아 색인에 넣어 줍니다. (같은 폴더의 사진·첨부도 함께 연결합니다)"));
       var rImp = el("div", "row");
@@ -7270,11 +7315,11 @@
       var r3 = el("div", "row");
       var ex = el("button", "btn sm", "전체 기록 JSON 내려받기");
       ex.addEventListener("click", function () {
-        var blob = new Blob([JSON.stringify({ version: 2, app: "PKEMS", settings: settings, entries: entries.map(slim) }, null, 2)],
+        var blob = new Blob([JSON.stringify({ version: 2, app: "PEER", settings: settings, entries: entries.map(slim) }, null, 2)],
           { type: "application/json" });
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = "PKEMS-backup-" + dateStamp() + ".json";
+        a.download = "PEER-backup-" + dateStamp() + ".json";
         a.click();
       });
       r3.appendChild(ex);

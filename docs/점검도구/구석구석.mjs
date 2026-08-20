@@ -89,9 +89,9 @@ await ev(`(() => {
       mdId: 'MD' + i, mdName: d + '_' + NM[ty] + '_' + TI[t] + '.md'
     });
   }
-  localStorage.setItem('pkems.entries.v2', JSON.stringify(L));
-  localStorage.setItem('pkems.folder', JSON.stringify({id:'X', name:'05_도구개발', link:''}));
-  localStorage.removeItem('pkems.draft.v1');
+  localStorage.setItem('peer.entries.v2', JSON.stringify(L));
+  localStorage.setItem('peer.folder', JSON.stringify({id:'X', name:'05_도구개발', link:''}));
+  localStorage.removeItem('peer.draft.v1');
   return true;
 })()`);
 await send("Page.navigate", { url: URL_ });

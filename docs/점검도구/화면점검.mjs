@@ -1,4 +1,4 @@
-/* PKEMS 화면 점검 — Edge 를 머리 없이 띄워 CDP 로 직접 눌러 본다.
+/* PEER 화면 점검 — Edge 를 머리 없이 띄워 CDP 로 직접 눌러 본다.
    설치할 것 없음: 노드 24 에 들어 있는 WebSocket 만 쓴다.
    실행:  node smoke.mjs [url] */
 import { spawn } from "node:child_process";
@@ -21,7 +21,7 @@ if (!EDGE) { console.error("엣지도 크롬도 찾지 못했습니다."); proce
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const profile = mkdtempSync(join(tmpdir(), "pkems-smoke-"));
+const profile = mkdtempSync(join(tmpdir(), "peer-smoke-"));
 const edge = spawn(EDGE, [
   "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
   `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`,
@@ -523,7 +523,7 @@ if (swReady) {
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     fd.append('files', new File([blob], '칠판사진.png', { type: 'image/png' }));
     await fetch('./share', { method: 'POST', body: fd });
-    const cache = await caches.open('pkems-share-inbox');
+    const cache = await caches.open('peer-share-inbox');
     const meta = await cache.match('/__share__/meta');
     const file = await cache.match('/__share__/file0');
     return JSON.stringify({
@@ -563,17 +563,17 @@ await evaluate(`(() => {
   for (let i = 12; i < 19; i++) list.push(mk(i, 'knowledge', ['평가']));
   for (let i = 19; i < 22; i++) list.push(mk(i, 'idea', ['연수', '수업설계']));
   list.push(mk(99, 'experience', []));
-  localStorage.setItem('pkems.entries.v2', JSON.stringify(list));
-  localStorage.removeItem('pkems.draft.v1');
+  localStorage.setItem('peer.entries.v2', JSON.stringify(list));
+  localStorage.removeItem('peer.draft.v1');
   return true;
 })()`);
 await send("Page.navigate", { url: URL_ });
 await wait(2500);
 // 태그가 곧 폴더인 상태로 맞춰 둔다 — 트리가 태그별로 갈라지는지 보려고
 await evaluate(`(() => {
-  const s = JSON.parse(localStorage.getItem('pkems.settings.v1') || '{}');
+  const s = JSON.parse(localStorage.getItem('peer.settings.v1') || '{}');
   s.folderMode = 'tag';
-  localStorage.setItem('pkems.settings.v1', JSON.stringify(s));
+  localStorage.setItem('peer.settings.v1', JSON.stringify(s));
   return true;
 })()`);
 await send("Page.navigate", { url: URL_ });
