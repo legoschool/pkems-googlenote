@@ -516,6 +516,11 @@
   .crophint { font-size: 12.5px; color: var(--ink-soft); margin: 10px 0 0; }
   .modebar { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; flex-wrap: wrap; }
 
+  /* 손 메모 판 — 손가락으로 그릴 때 화면이 같이 밀리면 안 된다 */
+  .drawwrap { width: 100%; }
+  .drawpad { display: block; width: 100%; background: #fff; border: 1px solid var(--line);
+             border-radius: 10px; touch-action: none; cursor: crosshair; }
+
   /* 웹캠 미리보기 — 규칙이 없으면 1920x1080 원본이 그대로 나와 모달을 뚫는다 */
   .camview { display: block; width: 100%; height: auto; max-width: 100%; max-height: 58vh;
              object-fit: contain; background: #000; border-radius: 10px; border: 1px solid var(--line); }
@@ -628,6 +633,7 @@
         <button class="btn sm" data-add="quote">＋ 인용</button>
         <button class="btn sm" data-add="capture">＋ 캡처</button>
         <button class="btn sm" data-add="image">＋ 사진</button>
+        <button class="btn sm" data-add="draw">＋ 손 메모</button>
         <button class="btn sm" data-add="file">＋ 파일·영상</button>
         <button class="btn sm" data-add="link">＋ 링크</button>
         <button class="btn sm" data-add="embed">＋ 코드 삽입</button>
@@ -2276,6 +2282,7 @@
     if (kind === "image") { $("imgInput").click(); return; }
     if (kind === "file") { $("fileInput").click(); return; }
     if (kind === "capture") { startCapture(); return; }
+    if (kind === "draw") { openDrawModal(); return; }
     var b = newBlock(kind, data);
     blocks.push(b);
     renderBlocks();
@@ -2783,6 +2790,181 @@
         }
       }, "image/png");
     });
+  }
+
+  /* ---------- ✍️ 손 메모 — 손으로 쓰고 그린 것을 그대로 담는다 ----------
+     칠판 앞에서, 회의 중에, 책 옆에서 — 자판을 두드리기 어려운 자리를 위한 것.
+     획을 «점의 목록» 으로 들고 있다가 매번 다시 그린다. 되돌리기가 공짜가 되고,
+     화면을 돌리거나 창 크기가 바뀌어도 그림이 뭉개지지 않는다. */
+  function openDrawModal() {
+    closeModal();
+    var strokes = [];          // [{ color, size, eraser, pts:[{x,y,p}] }]
+    var current = null;
+    var pen = { color: "#1b2130", size: 3, eraser: false };
+    var PAPER = { w: 1600, h: 1100 };   // 저장되는 실제 크기 (화면 크기와 무관하게 고정)
+
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "min(1040px, 97vw)";
+
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "✍️ 손 메모"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody"); body.style.textAlign = "center";
+
+    var tools = el("div", "modebar");
+    function toolBtn(label, on, fn) {
+      var b = el("button", "btn sm" + (on ? " primary" : ""), label);
+      b.addEventListener("click", function () { fn(); syncTools(); });
+      tools.appendChild(b);
+      return b;
+    }
+    var COLORS = [["검정", "#1b2130"], ["빨강", "#d92d20"], ["파랑", "#2f5fd6"]];
+    var SIZES = [["가늘게", 2], ["보통", 3.5], ["굵게", 7]];
+    var colorBtns = COLORS.map(function (c) {
+      return toolBtn(c[0], false, function () { pen.color = c[1]; pen.eraser = false; });
+    });
+    var sizeBtns = SIZES.map(function (s) {
+      return toolBtn(s[0], false, function () { pen.size = s[1]; });
+    });
+    var eraserBtn = toolBtn("지우개", false, function () { pen.eraser = !pen.eraser; });
+    body.appendChild(tools);
+
+    var wrap = el("div", "drawwrap");
+    var cv = el("canvas", "drawpad");
+    wrap.appendChild(cv);
+    body.appendChild(wrap);
+    body.appendChild(el("p", "crophint",
+      "손가락·펜·마우스 모두 됩니다. 태블릿 펜이면 누르는 세기에 따라 굵기가 달라집니다. " +
+      "저장하면 사진 한 장으로 들어가고, 드라이브에도 그림 파일로 쌓입니다."));
+    m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    var undo = el("button", "btn", "↩ 한 획 되돌리기");
+    undo.addEventListener("click", function () { strokes.pop(); redraw(); syncTools(); });
+    var clear = el("button", "btn", "전부 지우기");
+    clear.addEventListener("click", function () { strokes = []; redraw(); syncTools(); });
+    var save = el("button", "btn primary", "이 메모 넣기");
+    save.addEventListener("click", commit);
+    foot.appendChild(undo); foot.appendChild(clear);
+    foot.appendChild(el("span", "spacer"));
+    foot.appendChild(save);
+    m.appendChild(foot);
+
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+
+    function syncTools() {
+      colorBtns.forEach(function (b, i) {
+        b.className = "btn sm" + (!pen.eraser && pen.color === COLORS[i][1] ? " primary" : "");
+      });
+      sizeBtns.forEach(function (b, i) {
+        b.className = "btn sm" + (pen.size === SIZES[i][1] ? " primary" : "");
+      });
+      eraserBtn.className = "btn sm" + (pen.eraser ? " primary" : "");
+      undo.disabled = !strokes.length;
+      clear.disabled = !strokes.length;
+      save.disabled = !strokes.length;
+    }
+
+    /* 화면에 보이는 크기와 저장되는 크기는 다르다.
+       그리는 좌표는 항상 «저장되는 크기» 기준으로 바꿔 둔다. */
+    function fit() {
+      var r = wrap.getBoundingClientRect();
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.round(r.width * dpr);
+      cv.height = Math.round(r.width * dpr * PAPER.h / PAPER.w);
+      cv.style.height = Math.round(r.width * PAPER.h / PAPER.w) + "px";
+      redraw();
+    }
+    function toPaper(e) {
+      var r = cv.getBoundingClientRect();
+      return {
+        x: (e.clientX - r.left) / r.width * PAPER.w,
+        y: (e.clientY - r.top) / r.height * PAPER.h,
+        p: (e.pressure && e.pressure > 0 && e.pointerType === "pen") ? e.pressure : 0.5
+      };
+    }
+    function drawStroke(ctx, s, scale) {
+      if (!s.pts.length) return;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.strokeStyle = s.eraser ? "#ffffff" : s.color;
+      for (var i = 1; i < s.pts.length; i++) {
+        var a = s.pts[i - 1], b2 = s.pts[i];
+        ctx.beginPath();
+        ctx.lineWidth = s.size * scale * (s.eraser ? 6 : (0.6 + b2.p));
+        ctx.moveTo(a.x * scale, a.y * scale);
+        ctx.lineTo(b2.x * scale, b2.y * scale);
+        ctx.stroke();
+      }
+      if (s.pts.length === 1) {   // 점 하나만 찍은 것도 남긴다
+        var q = s.pts[0];
+        ctx.fillStyle = s.eraser ? "#ffffff" : s.color;
+        ctx.beginPath();
+        ctx.arc(q.x * scale, q.y * scale, s.size * scale * (s.eraser ? 3 : 0.6), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    function paintAll(ctx, w, h) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      var scale = w / PAPER.w;
+      strokes.forEach(function (s) { drawStroke(ctx, s, scale); });
+      if (current) drawStroke(ctx, current, scale);
+    }
+    function redraw() { paintAll(cv.getContext("2d"), cv.width, cv.height); }
+
+    cv.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      cv.setPointerCapture(e.pointerId);
+      current = { color: pen.color, size: pen.size, eraser: pen.eraser, pts: [toPaper(e)] };
+      redraw();
+    });
+    cv.addEventListener("pointermove", function (e) {
+      if (!current) return;
+      e.preventDefault();
+      var p = toPaper(e), last = current.pts[current.pts.length - 1];
+      // 너무 촘촘한 점은 버린다 (긴 메모에서 획이 수천 개가 되는 것을 막는다)
+      if (Math.abs(p.x - last.x) + Math.abs(p.y - last.y) < 1.2) return;
+      current.pts.push(p);
+      redraw();
+    });
+    function endStroke(e) {
+      if (!current) return;
+      if (e && e.pointerId != null) { try { cv.releasePointerCapture(e.pointerId); } catch (err) {} }
+      strokes.push(current); current = null;
+      redraw(); syncTools();
+    }
+    cv.addEventListener("pointerup", endStroke);
+    cv.addEventListener("pointercancel", endStroke);
+    cv.addEventListener("pointerleave", function (e) { if (current) endStroke(e); });
+
+    function commit() {
+      if (!strokes.length) return;
+      var out = document.createElement("canvas");
+      out.width = PAPER.w; out.height = PAPER.h;
+      paintAll(out.getContext("2d"), PAPER.w, PAPER.h);
+      canvasToAttachment(out, null).then(function (att) {
+        // 드라이브에서 한눈에 알아보게 이름을 «손메모» 로 바꿔 준다
+        att.original = "손메모_" + dateStamp() + "_" + timeStamp() + (/\.jpg$/.test(att.original) ? ".jpg" : ".png");
+        blocks.push(newBlock("image", att));
+        renderBlocks();
+        closeModal();
+        toast("손 메모를 넣었습니다. (" + humanSize(att.size) + ")");
+        var last = $("blocks").lastElementChild;
+        if (last) last.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+
+    setTimeout(function () { fit(); syncTools(); }, 0);
+    var refit = function () { fit(); };
+    window.addEventListener("resize", refit);
+    modalCleanup = function () { window.removeEventListener("resize", refit); };
   }
 
   /* 이미 넣어 둔 사진을 다시 열어 가리기.
