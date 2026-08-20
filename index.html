@@ -517,6 +517,13 @@
   .modebar { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; flex-wrap: wrap; }
 
   /* 손 메모 판 — 손가락으로 그릴 때 화면이 같이 밀리면 안 된다 */
+  /* 녹음 화면 — 숫자와 막대가 «지금 담기고 있다» 를 말해 준다 */
+  .voiceclock { font-size: 40px; font-weight: 800; letter-spacing: 1px; margin: 4px 0 10px;
+                font-variant-numeric: tabular-nums; }
+  .voicemeter { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden;
+                margin: 0 auto 10px; max-width: 420px; }
+  .voicebar { height: 100%; width: 0; background: var(--brand); border-radius: 99px; transition: width .08s linear; }
+
   .drawwrap { width: 100%; display: flex; justify-content: center; }
   .drawpad { display: block; margin: 0 auto; background: #fff; border: 1px solid var(--line);
              border-radius: 10px; touch-action: none; cursor: crosshair; }
@@ -634,6 +641,7 @@
         <button class="btn sm" data-add="capture">＋ 캡처</button>
         <button class="btn sm" data-add="image">＋ 사진</button>
         <button class="btn sm" data-add="draw">＋ 손 메모</button>
+        <button class="btn sm" data-add="voice">＋ 녹음</button>
         <button class="btn sm" data-add="file">＋ 파일·영상</button>
         <button class="btn sm" data-add="link">＋ 링크</button>
         <button class="btn sm" data-add="embed">＋ 코드 삽입</button>
@@ -2283,6 +2291,7 @@
     if (kind === "file") { $("fileInput").click(); return; }
     if (kind === "capture") { startCapture(); return; }
     if (kind === "draw") { openDrawModal(); return; }
+    if (kind === "voice") { openVoiceModal(); return; }
     var b = newBlock(kind, data);
     blocks.push(b);
     renderBlocks();
@@ -2790,6 +2799,268 @@
         }
       }, "image/png");
     });
+  }
+
+  /* ---------- 🎙️ 녹음 · 받아쓰기 ----------
+     소리는 MediaRecorder 로 담고, 받아쓰기는 브라우저에 딸린 음성인식을 쓴다.
+     둘 다 «따로 키를 받을 것도, 돈 낼 것도» 없다.
+
+     ⚠️ 솔직하게 적어 둔다 — 이 화면을 열어 둔 동안에만 녹음된다.
+        다른 앱으로 넘어가거나 화면이 꺼지면 브라우저가 마이크를 놓는다.
+        «켜 두면 알아서» 는 웹앱으로는 안 되는 일이다. 그래서 화면이 꺼지지
+        않게 붙잡아 두고, 끊기면 숨기지 않고 화면에 알린다. */
+  function pickAudioType() {
+    var candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac", "audio/ogg"];
+    for (var i = 0; i < candidates.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidates[i])) {
+        return candidates[i];
+      }
+    }
+    return "";
+  }
+  function speechCtor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  }
+  function mmss(sec) {
+    var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function openVoiceModal() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      toast("이 브라우저는 녹음을 지원하지 않습니다.");
+      return;
+    }
+    closeModal();
+
+    var stream = null, rec = null, chunks = [], started = 0, timer = null;
+    var recog = null, wantRecog = !!speechCtor(), recogOn = false;
+    var finalText = "", interim = "";
+    var audioBlob = null, audioType = pickAudioType();
+    var state = "idle";     // idle · recording · done
+
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "640px";
+
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "🎙️ 녹음 · 받아쓰기"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕");
+    x.addEventListener("click", function () { stopAll(); closeModal(); });
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody"); body.style.textAlign = "center";
+
+    var clock = el("div", "voiceclock", "0:00");
+    body.appendChild(clock);
+    var meterWrap = el("div", "voicemeter");
+    var meterBar = el("div", "voicebar");
+    meterWrap.appendChild(meterBar);
+    body.appendChild(meterWrap);
+
+    var note = el("p", "crophint", wantRecog
+      ? "말하는 대로 아래에 받아 적힙니다. 틀린 곳은 그 자리에서 고치면 됩니다."
+      : "이 브라우저는 받아쓰기를 지원하지 않습니다. 소리만 저장됩니다. (크롬을 쓰면 받아쓰기가 됩니다)");
+    body.appendChild(note);
+
+    var warn = el("p", "crophint");
+    warn.style.color = "var(--brand)";
+    warn.textContent = "⚠️ 이 창을 열어 둔 동안에만 녹음됩니다. 다른 앱으로 넘어가거나 화면이 꺼지면 멈춥니다.";
+    body.appendChild(warn);
+
+    var scriptField = el("div", "field");
+    scriptField.appendChild(el("label", null, "받아 적은 글 — 고쳐도 됩니다"));
+    var ta = el("textarea", "inp");
+    ta.rows = 7;
+    ta.placeholder = wantRecog ? "말하면 여기에 쌓입니다." : "여기에 직접 적어도 됩니다.";
+    ta.addEventListener("input", function () { finalText = ta.value; interim = ""; });
+    scriptField.appendChild(ta);
+    body.appendChild(scriptField);
+
+    var player = el("audio");
+    player.controls = true;
+    player.style.width = "100%";
+    player.style.display = "none";
+    body.appendChild(player);
+    m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    var status = el("span", "desc"); status.style.margin = "0";
+    foot.appendChild(status);
+    foot.appendChild(el("span", "spacer"));
+    var again = el("button", "btn", "다시 녹음");
+    again.style.display = "none";
+    again.addEventListener("click", function () {
+      audioBlob = null; player.style.display = "none";
+      finalText = ""; interim = ""; ta.value = "";
+      state = "idle"; sync(); start();
+    });
+    var mainBtn = el("button", "btn primary", "● 녹음 시작");
+    mainBtn.addEventListener("click", function () {
+      if (state === "idle") start();
+      else if (state === "recording") stopAll();
+    });
+    var put = el("button", "btn primary", "이 녹음 넣기");
+    put.style.display = "none";
+    put.addEventListener("click", commit);
+    foot.appendChild(again); foot.appendChild(mainBtn); foot.appendChild(put);
+    m.appendChild(foot);
+
+    bg.appendChild(m);
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+    modalCleanup = function () { stopAll(); };
+
+    function sync() {
+      mainBtn.style.display = state === "done" ? "none" : "";
+      mainBtn.textContent = state === "recording" ? "■ 멈추기" : "● 녹음 시작";
+      mainBtn.className = state === "recording" ? "btn danger" : "btn primary";
+      again.style.display = state === "done" ? "" : "none";
+      put.style.display = state === "done" ? "" : "none";
+      meterWrap.style.opacity = state === "recording" ? "1" : ".25";
+    }
+
+    function tick() {
+      clock.textContent = mmss((Date.now() - started) / 1000);
+    }
+
+    function start() {
+      status.textContent = "마이크를 여는 중…";
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+        stream = s;
+        chunks = [];
+        var opt = audioType ? { mimeType: audioType } : undefined;
+        try { rec = new MediaRecorder(s, opt); }
+        catch (e) { rec = new MediaRecorder(s); }
+        rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        rec.onstop = function () {
+          audioBlob = new Blob(chunks, { type: rec.mimeType || audioType || "audio/webm" });
+          player.src = URL.createObjectURL(audioBlob);
+          player.style.display = "";
+          status.textContent = "녹음 " + mmss((Date.now() - started) / 1000) + " · " + humanSize(audioBlob.size);
+          state = "done"; sync();
+        };
+        rec.start(1000);          // 1초씩 끊어 담는다. 중간에 끊겨도 담긴 데까진 남는다.
+        started = Date.now();
+        timer = setInterval(tick, 250);
+        state = "recording"; sync();
+        status.textContent = "녹음 중";
+        keepAwake();
+        listenLevel(s);
+        if (wantRecog) startRecog();
+      }).catch(function (e) {
+        status.textContent = "";
+        toast("마이크를 쓸 수 없습니다: " + errText(e));
+        toast2("브라우저 주소창 옆 자물쇠에서 마이크를 «허용» 으로 바꿔 주세요.");
+      });
+    }
+
+    /* 소리 크기 막대 — «지금 녹음되고 있다» 를 눈으로 보여 준다.
+       숫자가 안 움직이면 마이크가 죽은 것이라 바로 알 수 있다. */
+    var audioCtx = null, rafId = 0;
+    function listenLevel(s) {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        var src = audioCtx.createMediaStreamSource(s);
+        var an = audioCtx.createAnalyser();
+        an.fftSize = 512;
+        src.connect(an);
+        var buf = new Uint8Array(an.frequencyBinCount);
+        (function loop() {
+          if (state !== "recording") return;
+          an.getByteTimeDomainData(buf);
+          var peak = 0;
+          for (var i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+          meterBar.style.width = Math.min(100, peak / 64 * 100) + "%";
+          rafId = requestAnimationFrame(loop);
+        })();
+      } catch (e) { /* 막대가 없어도 녹음은 된다 */ }
+    }
+
+    /* 브라우저 음성인식은 조용하면 저절로 멈춘다. 멈추면 곧바로 다시 켠다. */
+    function startRecog() {
+      var Ctor = speechCtor();
+      if (!Ctor) return;
+      try { recog = new Ctor(); } catch (e) { return; }
+      recog.lang = "ko-KR";
+      recog.continuous = true;
+      recog.interimResults = true;
+      recog.onresult = function (ev) {
+        interim = "";
+        for (var i = ev.resultIndex; i < ev.results.length; i++) {
+          var t = ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) finalText += (finalText && !/\s$/.test(finalText) ? " " : "") + t.trim();
+          else interim += t;
+        }
+        ta.value = finalText + (interim ? (finalText ? " " : "") + interim : "");
+        ta.scrollTop = ta.scrollHeight;
+      };
+      recog.onerror = function (ev) {
+        if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+          wantRecog = false;
+          note.textContent = "받아쓰기 권한이 없어 소리만 저장합니다.";
+        }
+      };
+      recog.onend = function () {
+        recogOn = false;
+        if (state === "recording" && wantRecog) {
+          setTimeout(function () { if (state === "recording") { try { recog.start(); recogOn = true; } catch (e) {} } }, 250);
+        }
+      };
+      try { recog.start(); recogOn = true; } catch (e) {}
+    }
+
+    function stopAll() {
+      if (timer) { clearInterval(timer); timer = null; }
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+      if (recog) { try { recog.onend = null; recog.stop(); } catch (e) {} recog = null; recogOn = false; }
+      if (rec && rec.state !== "inactive") { try { rec.stop(); } catch (e) {} }
+      if (stream) { stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} }); stream = null; }
+      if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
+      if (state === "recording") { releaseAwake(); }
+      meterBar.style.width = "0";
+    }
+
+    // 다른 앱으로 넘어가 브라우저가 마이크를 놓았을 수 있다. 숨기지 말고 알려 준다.
+    var onHide = function () {
+      if (document.visibilityState === "hidden" && state === "recording") {
+        warn.textContent = "⚠️ 화면을 벗어났습니다 — 그 사이 소리가 빠졌을 수 있습니다.";
+      }
+    };
+    document.addEventListener("visibilitychange", onHide);
+    var prevCleanup = modalCleanup;
+    modalCleanup = function () {
+      document.removeEventListener("visibilitychange", onHide);
+      if (prevCleanup) prevCleanup();
+    };
+
+    function commit() {
+      var text = ta.value.trim();
+      var made = [];
+      if (audioBlob) {
+        var ext = /mp4|aac/.test(audioBlob.type) ? ".m4a" : (/ogg/.test(audioBlob.type) ? ".ogg" : ".webm");
+        made.push(newBlock("file", {
+          original: "녹음_" + dateStamp() + "_" + timeStamp() + ext,
+          mime: audioBlob.type || "audio/webm",
+          size: audioBlob.size,
+          blob: audioBlob,
+          caption: text ? text.slice(0, 60) : ""
+        }));
+      }
+      if (text) made.push(newBlock("text", { text: text }));
+      if (!made.length) { toast("담긴 것이 없습니다."); return; }
+      blocks = blocks.concat(made);
+      renderBlocks();
+      stopAll();
+      closeModal();
+      toast("녹음" + (text ? "과 받아 적은 글" : "") + "을 넣었습니다.");
+      var last = $("blocks").lastElementChild;
+      if (last) last.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    sync();
   }
 
   /* ---------- ✍️ 손 메모 — 손으로 쓰고 그린 것을 그대로 담는다 ----------
