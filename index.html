@@ -48,10 +48,19 @@
 
   /* ---------- 상단 바 ---------- */
   header.top { position: sticky; top: 0; z-index: 40; background: var(--panel); border-bottom: 1px solid var(--line); }
-  .top-inner { max-width: 1000px; margin: 0 auto; padding: 9px 16px; display: flex; align-items: center; gap: 10px; }
+  /* flex-wrap 이 없으면 단추가 화면 밖으로 밀려난다. 폰에서 실제로 그랬다. */
+  .top-inner { max-width: 1000px; margin: 0 auto; padding: 9px 16px; display: flex; align-items: center;
+               gap: 10px; flex-wrap: wrap; }
   .logo { font-weight: 800; font-size: 16.5px; letter-spacing: -.3px; display: flex; align-items: center; gap: 7px; }
   .logo small { font-weight: 500; font-size: 12px; color: var(--ink-soft); letter-spacing: 0; }
-  @media (max-width: 560px) { .logo small { display: none; } }
+  /* 좁은 화면에서는 머리줄 단추를 그림글자만 남긴다. 한 줄에 들어가야 목록이 위로 올라온다. */
+  @media (max-width: 560px) {
+    .logo small { display: none; }
+    .top-inner { gap: 6px; }
+    .top-inner .lbl { display: none; }
+    .top-inner .btn.sm { padding: 8px 9px; }
+    .logo { font-size: 15px; }
+  }
   .acct { font-size: 12.5px; color: var(--ink-soft); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .btn {
@@ -645,10 +654,10 @@
     <span id="syncPill" class="syncpill"></span>
     <span id="acct" class="acct"></span>
     <button id="btnHelp" class="btn sm" title="연결·백링크·관계망 사용법">❔</button>
-    <button id="btnInstall" class="btn sm" style="display:none" title="이 기록장을 내 컴퓨터에 앱으로 설치합니다">⬇ 앱으로 설치</button>
-    <button id="btnMap" class="btn sm">🗂 폴더 구조</button>
-    <button id="btnGraph" class="btn sm">🕸️ 관계망</button>
-    <button id="btnSettings" class="btn sm">⚙️ 설정</button>
+    <button id="btnInstall" class="btn sm" style="display:none" title="이 기록장을 내 컴퓨터에 앱으로 설치합니다">⬇<span class="lbl"> 앱으로 설치</span></button>
+    <button id="btnMap" class="btn sm" title="폴더 구조">🗂<span class="lbl"> 폴더 구조</span></button>
+    <button id="btnGraph" class="btn sm" title="관계망">🕸️<span class="lbl"> 관계망</span></button>
+    <button id="btnSettings" class="btn sm" title="설정">⚙️<span class="lbl"> 설정</span></button>
     <button id="btnLogin" class="btn sm primary">구글 로그인</button>
   </div>
 </header>
@@ -5510,7 +5519,9 @@
      ========================================================= */
   function updateChrome() {
     $("acct").textContent = userEmail ? "👤 " + userEmail : "";
-    $("btnLogin").textContent = connected ? "동기화" : "구글 로그인";
+    // 폰에서는 「구글 로그인」이 한 글자만큼 길어서 머리줄이 두 줄이 된다
+    var narrow = window.innerWidth <= 560;
+    $("btnLogin").textContent = connected ? "동기화" : (narrow ? "로그인" : "구글 로그인");
     var b = $("banner");
     b.innerHTML = "";
     /* 폴더는 그대로인데 열쇠만 풀린 상태 — «처음 쓰는 사람» 안내를 띄우면 안 된다.
@@ -7465,6 +7476,18 @@
   (function () {
     var b = document.querySelector('[data-add="capture"]');
     if (b && isTouchDevice()) b.textContent = "📸 캡처·촬영";
+  })();
+
+  // 화면을 돌리거나 창을 줄이면 머리줄 글자도 그에 맞춘다
+  (function () {
+    var was = window.innerWidth <= 560, t = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(t);
+      t = setTimeout(function () {
+        var now = window.innerWidth <= 560;
+        if (now !== was) { was = now; updateChrome(); }
+      }, 150);
+    });
   })();
 
   if (clientId && folder.id && localStorage.getItem(LS.connected) === "1") {
