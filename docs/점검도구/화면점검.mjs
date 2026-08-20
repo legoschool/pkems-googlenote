@@ -239,6 +239,129 @@ if (mo.open) {
   check("넣은 사진에도 «가리기» 단추가 붙는다", pl.maskBtn);
 }
 
+/* ---------- 4-1-2. 사진 가리기 (여러 장 한 번에) ----------
+   사진 두 장을 더 넣어 놓고, 원 도장이 진짜로 뭉개는지 픽셀로 본다. */
+await evaluate(`(async () => {
+  const mk = (seed) => new Promise(async res => {
+    const c = document.createElement('canvas'); c.width = 240; c.height = 180;
+    const x = c.getContext('2d');
+    let s = seed;
+    const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const im = x.createImageData(c.width, c.height);
+    for (let i = 0; i < im.data.length; i += 4) {
+      im.data[i] = rnd()*255; im.data[i+1] = rnd()*255; im.data[i+2] = rnd()*255; im.data[i+3] = 255;
+    }
+    x.putImageData(im, 0, 0);
+    c.toBlob(b => res(new File([b], '단체사진' + seed + '.png', { type: 'image/png' })), 'image/png');
+  });
+  const dt = new DataTransfer();
+  dt.items.add(await mk(7)); dt.items.add(await mk(21));
+  const inp = document.getElementById('imgInput');
+  inp.files = dt.files;
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+})()`);
+await wait(1200);
+
+const maskBar = JSON.parse(await evaluate(`JSON.stringify({
+  shown: !document.getElementById('maskBar').classList.contains('hidden'),
+  hint: (document.getElementById('maskBarHint')||{}).textContent || ''
+})`));
+check("사진이 있으면 «사진 가리기» 줄이 나온다", maskBar.shown, maskBar.hint);
+
+const studio = await evaluate(`(() => {
+  document.getElementById('btnMaskAll').click();
+  return document.querySelector('.maskpad') ? 'OPEN' : 'NO_PAD';
+})()`);
+check("가리기 화면이 열린다", studio === "OPEN", String(studio));
+
+if (studio === "OPEN") {
+  await wait(700);
+  const setup = JSON.parse(await evaluate(`JSON.stringify({
+    thumbs: document.querySelectorAll('.maskthumb').length,
+    sizes: Array.from(document.querySelectorAll('.modebar button')).map(b => b.textContent.trim()),
+    canvasW: document.querySelector('.maskpad').width
+  })`));
+  check("이 기록의 사진이 전부 늘어선다", setup.thumbs >= 3, `${setup.thumbs}장`);
+  check("원 크기를 고를 수 있다", setup.sizes.length === 4, setup.sizes.join(" / "));
+
+  // 가운데를 한 번 «톡» 누른다
+  const stamped = JSON.parse(await evaluate(`(() => {
+    const cv = document.querySelector('.maskpad');
+    cv.setPointerCapture = () => {}; cv.releasePointerCapture = () => {};
+    const x = cv.getContext('2d');
+    const was = Array.from(x.getImageData(0, 0, cv.width, cv.height).data);
+    const r = cv.getBoundingClientRect();
+    const ev = (t, cx, cy) => cv.dispatchEvent(new PointerEvent(t, {
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch',
+      isPrimary: true, clientX: cx, clientY: cy }));
+    ev('pointerdown', r.left + r.width/2, r.top + r.height/2);
+    ev('pointerup', r.left + r.width/2, r.top + r.height/2);
+    const now = x.getImageData(0, 0, cv.width, cv.height).data;
+    // 가운데(원 안)와 모서리(원 밖)를 나눠 센다
+    let inside = 0, outside = 0;
+    const cxp = cv.width/2, cyp = cv.height/2;
+    const rad = Math.max(cv.width, cv.height) * 0.06;
+    for (let y = 0; y < cv.height; y += 2) for (let px = 0; px < cv.width; px += 2) {
+      const i = (y*cv.width + px)*4;
+      const d = Math.abs(now[i]-was[i]) + Math.abs(now[i+1]-was[i+1]) + Math.abs(now[i+2]-was[i+2]);
+      if (d <= 12) continue;
+      if (Math.hypot(px-cxp, y-cyp) <= rad * 1.15) inside++; else outside++;
+    }
+    return JSON.stringify({ inside, outside,
+      badge: (document.querySelector('.maskdone')||{}).textContent || '' });
+  })()`));
+  check("누른 자리가 동그랗게 뭉개진다", stamped.inside > 60, `${stamped.inside}px 바뀜`);
+  check("원 밖은 한 점도 안 건드린다", stamped.outside === 0, `${stamped.outside}px 바뀜`);
+  check("가린 사진에 ✓ 가 붙는다", /✓/.test(stamped.badge), stamped.badge);
+
+  /* 가장자리 얼굴 — 왼쪽 위 모서리에 찍어 본다.
+     원이 사진 밖으로 넘칠 때도 «그 자리는 반드시 지워져야» 한다.
+     (넘치는 네모를 잘라내는 계산이 틀리면 모서리가 빈 채로 남을 수 있다) */
+  const corner = JSON.parse(await evaluate(`(() => {
+    const cv = document.querySelector('.maskpad');
+    const x = cv.getContext('2d');
+    const was = Array.from(x.getImageData(0, 0, cv.width, cv.height).data);
+    const r = cv.getBoundingClientRect();
+    ['pointerdown','pointerup'].forEach(t => cv.dispatchEvent(new PointerEvent(t, {
+      bubbles: true, cancelable: true, pointerId: 3, pointerType: 'touch',
+      isPrimary: true, clientX: r.left + 2, clientY: r.top + 2 })));
+    const now = x.getImageData(0, 0, cv.width, cv.height).data;
+    // 모서리 바로 안쪽(0,0 근처)이 실제로 바뀌었는가
+    let nearCorner = 0;
+    for (let y = 0; y < 12; y++) for (let px = 0; px < 12; px++) {
+      const i = (y*cv.width + px)*4;
+      if (Math.abs(now[i]-was[i]) + Math.abs(now[i+1]-was[i+1]) + Math.abs(now[i+2]-was[i+2]) > 12) nearCorner++;
+    }
+    return JSON.stringify({ nearCorner });
+  })()`));
+  check("모서리에 찍어도 그 자리가 지워진다", corner.nearCorner > 60, `모서리 ${corner.nearCorner}/144px 바뀜`);
+  await evaluate(`Array.from(document.querySelectorAll('.mfoot button')).find(b => b.textContent.includes('한 번 되돌리기')).click(); true`);
+
+  // 다음 사진으로 넘어갔다 돌아와도 남아 있는가
+  await evaluate(`Array.from(document.querySelectorAll('.mfoot button')).find(b => b.textContent.includes('다음')).click(); true`);
+  await wait(600);
+  await evaluate(`Array.from(document.querySelectorAll('.mfoot button')).find(b => b.textContent.includes('이전')).click(); true`);
+  await wait(600);
+  const kept = JSON.parse(await evaluate(`JSON.stringify({
+    badges: document.querySelectorAll('.maskdone').length,
+    doneLabel: (Array.from(document.querySelectorAll('.mfoot button')).find(b => b.textContent.includes('다 됐습니다'))||{}).textContent || ''
+  })`));
+  check("사진을 넘나들어도 가린 것이 남는다", kept.badges >= 1, `✓ ${kept.badges}장`);
+  check("몇 장 고쳤는지 단추에 보인다", /\(\d+장\)/.test(kept.doneLabel), kept.doneLabel);
+
+  const applied = await evaluate(`(() => {
+    Array.from(document.querySelectorAll('.mfoot button')).find(b => b.textContent.includes('다 됐습니다')).click();
+    return true;
+  })()`);
+  await wait(1200);
+  const back = JSON.parse(await evaluate(`JSON.stringify({
+    modalGone: !document.querySelector('.maskpad'),
+    imgs: document.querySelectorAll('#blocks img.thumb').length
+  })`));
+  check("«다 됐습니다» 를 누르면 사진에 반영된다", back.modalGone && back.imgs > 0, `사진 ${back.imgs}장`);
+}
+
 /* ---------- 4-2. 손 메모 ---------- */
 const drawOpen = await evaluate(`(() => {
   const b = document.querySelector('[data-add="draw"]');
