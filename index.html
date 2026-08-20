@@ -517,6 +517,20 @@
   .modebar { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; flex-wrap: wrap; }
 
   /* 손 메모 판 — 손가락으로 그릴 때 화면이 같이 밀리면 안 된다 */
+  /* 폴더 지도 — 덩어리 크기가 곧 쌓인 양 */
+  .mapbox { position: relative; width: 100%; height: min(46vh, 400px); border-radius: 10px;
+            background: var(--bg); border: 1px solid var(--line); overflow: hidden; margin: 8px 0 10px; }
+  .mapcell { position: absolute; border: 0; border-radius: 8px; color: #fff; cursor: pointer;
+             display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end;
+             padding: 7px 9px; gap: 1px; overflow: hidden; text-align: left; font: inherit;
+             transition: filter .12s, transform .12s; }
+  .mapcell:hover { filter: brightness(1.12); transform: scale(.985); }
+  .mapname { font-weight: 700; font-size: 13.5px; line-height: 1.2; text-shadow: 0 1px 2px rgba(0,0,0,.25);
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .mapnum { font-size: 11.5px; opacity: .92; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .maplegend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--ink-soft); }
+  .maplg { display: inline-flex; align-items: center; gap: 4px; }
+
   /* 녹음 화면 — 숫자와 막대가 «지금 담기고 있다» 를 말해 준다 */
   .voiceclock { font-size: 40px; font-weight: 800; letter-spacing: 1px; margin: 4px 0 10px;
                 font-variant-numeric: tabular-nums; }
@@ -602,6 +616,7 @@
     <span id="acct" class="acct"></span>
     <button id="btnHelp" class="btn sm" title="연결·백링크·관계망 사용법">❔</button>
     <button id="btnInstall" class="btn sm" style="display:none" title="이 기록장을 내 컴퓨터에 앱으로 설치합니다">⬇ 앱으로 설치</button>
+    <button id="btnMap" class="btn sm">🗂 폴더 지도</button>
     <button id="btnGraph" class="btn sm">🕸️ 관계망</button>
     <button id="btnSettings" class="btn sm">⚙️ 설정</button>
     <button id="btnLogin" class="btn sm primary">구글 로그인</button>
@@ -741,6 +756,7 @@
     { key: "perEntry", label: "기록마다 폴더 하나", desc: "2026-08-16_경험_수업회고/ 안에 .md 와 자료를 함께" },
     { key: "materials", label: "글과 자료를 분리", desc: ".md 는 맨 위, 사진·파일은 자료/ 폴더에" },
     { key: "monthly", label: "월별 폴더", desc: "2026-08/ 안에 그 달 기록과 자료를 모아서" },
+    { key: "tag", label: "태그가 곧 폴더", desc: "#수업설계/ 처럼 태그 이름이 폴더가 된다. 태그가 여럿이면 나머지에는 바로가기" },
     { key: "flat", label: "한 폴더에 전부", desc: "예전 방식 — 나누지 않고 모두 같은 곳에" }
   ];
   var VIEW_MODES = [
@@ -1243,6 +1259,13 @@
       var m = dateStamp(n.createdAt).slice(0, 7);
       return ensureNamedFolder(m, folder.id).then(function (id) { return { md: id, file: id }; });
     }
+    /* 태그가 곧 폴더.
+       드라이브는 «파일 하나가 폴더 하나» 다 (2020년에 여러 폴더 두기가 없어졌다).
+       그래서 첫 태그를 진짜 자리로 삼고, 나머지 태그 폴더에는 «바로가기» 를 놓는다. */
+    if (mode === "tag") {
+      return ensureNamedFolder(primaryTagFolder(n), folder.id)
+        .then(function (id) { return { md: id, file: id }; });
+    }
     // perEntry — 기록마다 폴더 하나
     if (n.folderId) return Promise.resolve({ md: n.folderId, file: n.folderId, existing: true });
     var want = entryFolderName(n);
@@ -1253,6 +1276,41 @@
         return { md: f.id, file: f.id, created: true };
       });
   }
+  var NO_TAG_FOLDER = "태그없음";
+  function primaryTagFolder(n) {
+    var t = (n.tags || []).filter(Boolean)[0];
+    return t ? safeName(String(t), 60) : NO_TAG_FOLDER;
+  }
+  /* 두 번째 태그부터는 그 태그 폴더에 «바로가기» 를 놓는다.
+     드라이브 바로가기는 진짜 파일을 가리키는 표지판이라, 사본이 늘지 않는다.
+     이미 같은 이름이 있으면 그냥 둔다 — 여러 번 저장해도 쌓이지 않게. */
+  function createShortcut(name, parentId, targetId) {
+    return driveJson("https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name, mimeType: "application/vnd.google-apps.shortcut",
+        parents: [parentId], shortcutDetails: { targetId: targetId }
+      })
+    });
+  }
+  function syncTagShortcuts(n) {
+    if (settings.folderMode !== "tag" || !n.mdId) return Promise.resolve();
+    var tags = (n.tags || []).filter(Boolean).map(function (t) { return safeName(String(t), 60); });
+    var extra = tags.slice(1).filter(function (t, i, a) { return t && a.indexOf(t) === i; });
+    if (!extra.length) return Promise.resolve();
+    var linkName = n.mdName || (stemOf(mdName(n)) + ".md");
+    return extra.reduce(function (chain, tag) {
+      return chain.then(function () {
+        return ensureNamedFolder(tag, folder.id).then(function (fid) {
+          return findInFolder(linkName, fid).then(function (found) {
+            if (found) return null;
+            return createShortcut(linkName, fid, n.mdId);
+          });
+        });
+      }).catch(function (e) { console.warn("태그 바로가기 실패", tag, e); });
+    }, Promise.resolve());
+  }
+
   // 폴더 방식을 바꿨거나 새로 폴더가 생겼으면, 기존 파일도 그리로 옮긴다
   function relocateEntryFiles(n, t) {
     var jobs = [];
@@ -1538,6 +1596,12 @@
   function subfolderLabel() {
     if (settings.folderMode === "materials") return safeName(settings.materialsFolderName, 30);
     if (settings.folderMode === "monthly") return dateStamp().slice(0, 7);
+    if (settings.folderMode === "tag") {
+      // 작성 중인 기록의 첫 태그. 파일 이름 미리보기에서도 이게 {하위폴더} 로 보인다.
+      var raw = ($("tags") && $("tags").value) || "";
+      var first = raw.split(",")[0].trim();
+      return first ? safeName(first, 30) : NO_TAG_FOLDER;
+    }
     return "";
   }
 
@@ -2186,7 +2250,10 @@
               if (settings.alsoGdoc) extra.push(saveAsGoogleDoc(n, t.md));
               if (settings.alsoHtml) extra.push(saveAsHtml(n, t.md));
               return Promise.all(extra);
-            }).then(function () { delete n._dirty; });
+            })
+              // 태그가 여럿이면 나머지 태그 폴더에 바로가기를 놓는다
+              .then(function () { return syncTagShortcuts(n); })
+              .then(function () { delete n._dirty; });
           })
           .catch(function (e) { console.warn("저장 실패", n.title, e); })
           .then(tick);
@@ -5549,6 +5616,148 @@
     return TYPE_COLORS[i % TYPE_COLORS.length];
   }
 
+  /* ---------- 🗂 폴더 지도 — 무엇이 얼마나 쌓였는지 한눈에 ----------
+     태그 하나가 덩어리 하나다. 덩어리 크기 = 그 태그를 단 기록 수.
+     「태그가 곧 폴더」 방식을 쓰면 이 그림이 그대로 드라이브 폴더 모양이다.
+     누르면 그 태그만 걸러 보인다 — 보기만 하는 그림이 아니라 들어가는 문. */
+  function tagGroups() {
+    var by = {};
+    entries.forEach(function (n) {
+      var tags = (n.tags || []).filter(Boolean);
+      if (!tags.length) tags = [NO_TAG_FOLDER];
+      tags.forEach(function (t, i) {
+        var k = String(t);
+        if (!by[k]) by[k] = { name: k, n: 0, primary: 0, types: {} };
+        by[k].n++;
+        if (i === 0) by[k].primary++;
+        by[k].types[n.type] = (by[k].types[n.type] || 0) + 1;
+      });
+    });
+    return Object.keys(by).map(function (k) { return by[k]; })
+      .sort(function (a, b) { return b.n - a.n || a.name.localeCompare(b.name); });
+  }
+
+  /* 네모를 «정사각형에 가깝게» 잘라 나가는 방식(squarified treemap).
+     그냥 세로로 길게 자르면 이름이 안 보인다. */
+  function squarify(items, x, y, w, h, out) {
+    if (!items.length) return out;
+    if (items.length === 1) {
+      out.push({ item: items[0], x: x, y: y, w: w, h: h });
+      return out;
+    }
+    var total = items.reduce(function (s, i) { return s + i.value; }, 0);
+    var acc = 0, cut = 1;
+    // 절반쯤에서 끊으면 양쪽이 비슷해져 모양이 덜 길쭉해진다
+    for (var i = 0; i < items.length; i++) {
+      acc += items[i].value;
+      if (acc >= total / 2) { cut = i + 1; break; }
+    }
+    cut = Math.min(Math.max(1, cut), items.length - 1);
+    var head = items.slice(0, cut), tail = items.slice(cut);
+    var headSum = head.reduce(function (s, i) { return s + i.value; }, 0);
+    var ratio = headSum / total;
+    if (w >= h) {
+      squarify(head, x, y, w * ratio, h, out);
+      squarify(tail, x + w * ratio, y, w * (1 - ratio), h, out);
+    } else {
+      squarify(head, x, y, w, h * ratio, out);
+      squarify(tail, x, y + h * ratio, w, h * (1 - ratio), out);
+    }
+    return out;
+  }
+
+  function openFolderMap() {
+    closeModal();
+    var groups = tagGroups();
+
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "min(900px, 96vw)";
+
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "🗂 폴더 지도"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody");
+    if (!groups.length) {
+      body.appendChild(el("p", "desc", "아직 기록이 없습니다. 태그를 달아 저장하면 여기에 쌓인 모양이 보입니다."));
+    } else {
+      var isTagMode = settings.folderMode === "tag";
+      body.appendChild(el("p", "crophint", isTagMode
+        ? "지금 «태그가 곧 폴더» 방식이라, 이 그림이 그대로 드라이브 폴더 모양입니다. 덩어리를 누르면 그 태그만 걸러 보입니다."
+        : "태그별로 얼마나 쌓였는지 보여 줍니다. 덩어리를 누르면 그 태그만 걸러 보입니다. " +
+          "설정 → 저장 위치에서 «태그가 곧 폴더» 를 고르면, 드라이브 폴더도 이 모양이 됩니다."));
+      var mapBox = el("div", "mapbox");
+      body.appendChild(mapBox);
+
+      var legend = el("div", "maplegend");
+      settings.types.forEach(function (t) {
+        var s = el("span", "maplg");
+        var d = el("span", "dot"); d.style.background = typeColor(t.key);
+        s.appendChild(d); s.appendChild(document.createTextNode(" " + t.icon + " " + t.label));
+        legend.appendChild(s);
+      });
+      body.appendChild(legend);
+
+      var draw = function () {
+        mapBox.innerHTML = "";
+        var r = mapBox.getBoundingClientRect();
+        if (!r.width) return;
+        var cells = squarify(groups.map(function (g) { return { value: g.n, g: g }; }),
+                             0, 0, r.width, r.height, []);
+        cells.forEach(function (c) {
+          var g = c.item.g;
+          // 가장 많은 유형의 색을 쓴다 — 어떤 성격의 덩어리인지 색으로 보인다
+          var top = null, best = -1;
+          Object.keys(g.types).forEach(function (k) { if (g.types[k] > best) { best = g.types[k]; top = k; } });
+          var cell = el("button", "mapcell");
+          cell.style.left = c.x + "px"; cell.style.top = c.y + "px";
+          cell.style.width = Math.max(0, c.w - 3) + "px";
+          cell.style.height = Math.max(0, c.h - 3) + "px";
+          cell.style.background = typeColor(top);
+          var small = c.w < 74 || c.h < 40;
+          cell.title = g.name + " — 기록 " + g.n + "개" +
+            (g.primary !== g.n ? " (이 태그가 첫 태그인 것 " + g.primary + "개)" : "");
+          if (!small) {
+            cell.appendChild(el("span", "mapname", g.name));
+            cell.appendChild(el("span", "mapnum", String(g.n)));
+          } else if (c.w > 26 && c.h > 18) {
+            cell.appendChild(el("span", "mapnum", String(g.n)));
+          }
+          cell.addEventListener("click", function () {
+            filterTags = [g.name === NO_TAG_FOLDER ? "" : g.name].filter(Boolean);
+            filterPinned = false;
+            closeModal();
+            render();
+            toast(filterTags.length ? "「" + g.name + "」 태그만 보입니다." : "태그 없는 기록만 보려면 검색을 쓰세요.");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          });
+          mapBox.appendChild(cell);
+        });
+      };
+      setTimeout(draw, 0);
+      var onResize = function () { draw(); };
+      window.addEventListener("resize", onResize);
+      modalCleanup = function () { window.removeEventListener("resize", onResize); };
+    }
+    m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    foot.appendChild(el("span", "desc", "태그 " + groups.length + "종 · 기록 " + entries.length + "개"));
+    foot.appendChild(el("span", "spacer"));
+    var all = el("button", "btn", "전체 보기로 돌아가기");
+    all.addEventListener("click", function () { filterTags = []; closeModal(); render(); });
+    foot.appendChild(all);
+    m.appendChild(foot);
+
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+  }
+
   function openGraph() {
     closeModal();
     invalidateLinks();
@@ -6265,7 +6474,8 @@
           perEntry: "내 폴더/\n └ 2026-08-16_경험_수업회고/\n     ├ 2026-08-16_경험_수업회고.md\n     └ 2026-08-16_수업회고_01.png",
           materials: "내 폴더/\n ├ 2026-08-16_경험_수업회고.md\n └ 자료/\n     └ 2026-08-16_수업회고_01.png",
           monthly: "내 폴더/\n └ 2026-08/\n     ├ 2026-08-16_경험_수업회고.md\n     └ 2026-08-16_수업회고_01.png",
-          flat: "내 폴더/\n ├ 2026-08-16_경험_수업회고.md\n └ 2026-08-16_수업회고_01.png"
+          flat: "내 폴더/\n ├ 2026-08-16_경험_수업회고.md\n └ 2026-08-16_수업회고_01.png",
+          tag: "태그가 «수업설계, 3학년» 인 기록이라면\n\n내 폴더/\n ├ 수업설계/            ← 첫 태그가 진짜 자리\n │   ├ 2026-08-16_경험_수업회고.md\n │   └ 2026-08-16_수업회고_01.png\n └ 3학년/\n     └ 2026-08-16_경험_수업회고.md  ← 바로가기(표지판)"
         }[draft.folderMode] || "";
         d3.textContent = ex;
         d3.style.whiteSpace = "pre";
@@ -6521,6 +6731,7 @@
      13. 이벤트
      ========================================================= */
   $("btnSettings").addEventListener("click", function () { openSettings("storage"); });
+  $("btnMap").addEventListener("click", openFolderMap);
   $("btnGraph").addEventListener("click", openGraph);
   $("btnHelp").addEventListener("click", function () { openHelp("link"); });
   $("btnLogin").addEventListener("click", function () {
