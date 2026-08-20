@@ -517,8 +517,8 @@
   .modebar { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; flex-wrap: wrap; }
 
   /* 손 메모 판 — 손가락으로 그릴 때 화면이 같이 밀리면 안 된다 */
-  .drawwrap { width: 100%; }
-  .drawpad { display: block; width: 100%; background: #fff; border: 1px solid var(--line);
+  .drawwrap { width: 100%; display: flex; justify-content: center; }
+  .drawpad { display: block; margin: 0 auto; background: #fff; border: 1px solid var(--line);
              border-radius: 10px; touch-action: none; cursor: crosshair; }
 
   /* 웹캠 미리보기 — 규칙이 없으면 1920x1080 원본이 그대로 나와 모달을 뚫는다 */
@@ -2801,7 +2801,9 @@
     var strokes = [];          // [{ color, size, eraser, pts:[{x,y,p}] }]
     var current = null;
     var pen = { color: "#1b2130", size: 3, eraser: false };
-    var PAPER = { w: 1600, h: 1100 };   // 저장되는 실제 크기 (화면 크기와 무관하게 고정)
+    // 저장되는 실제 크기. 폰처럼 세로로 긴 화면에서는 종이도 세로로 세운다.
+    var portrait = window.innerHeight > window.innerWidth;
+    var PAPER = portrait ? { w: 1100, h: 1600 } : { w: 1600, h: 1100 };
 
     var bg = el("div", "modal-bg");
     var m = el("div", "card modal"); m.style.maxWidth = "min(1040px, 97vw)";
@@ -2875,11 +2877,15 @@
     /* 화면에 보이는 크기와 저장되는 크기는 다르다.
        그리는 좌표는 항상 «저장되는 크기» 기준으로 바꿔 둔다. */
     function fit() {
-      var r = wrap.getBoundingClientRect();
+      var maxW = wrap.getBoundingClientRect().width;
+      var maxH = Math.max(240, window.innerHeight * 0.52);   // 화면을 넘어가면 스크롤이 생겨 그리기 불편하다
+      var w = Math.min(maxW, maxH * PAPER.w / PAPER.h);
+      var h = w * PAPER.h / PAPER.w;
       var dpr = Math.min(2, window.devicePixelRatio || 1);
-      cv.width = Math.round(r.width * dpr);
-      cv.height = Math.round(r.width * dpr * PAPER.h / PAPER.w);
-      cv.style.height = Math.round(r.width * PAPER.h / PAPER.w) + "px";
+      cv.style.width = Math.round(w) + "px";
+      cv.style.height = Math.round(h) + "px";
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
       redraw();
     }
     function toPaper(e) {
