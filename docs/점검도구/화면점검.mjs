@@ -36,10 +36,21 @@ const pending = new Map();
 const errors = [];
 const logs = [];
 
+/* 답이 안 오면 영원히 매달린다 — 그러면 「멈춘 채로 끝」이라 무엇이 잘못됐는지 모른다.
+   30초 안에 답이 없으면 그 자리에서 실패로 알린다. */
 function send(method, params = {}) {
   const id = ++msgId;
   ws.send(JSON.stringify({ id, method, params }));
-  return new Promise((res, rej) => pending.set(id, { res, rej }));
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => {
+      pending.delete(id);
+      rej(new Error(`${method} 이 30초 안에 답하지 않았습니다`));
+    }, 30000);
+    pending.set(id, {
+      res: v => { clearTimeout(t); res(v); },
+      rej: e => { clearTimeout(t); rej(e); },
+    });
+  });
 }
 async function evaluate(expression) {
   const r = await send("Runtime.evaluate", {
@@ -511,6 +522,33 @@ if (treeOpen === "OPEN") {
   check(".md 를 누르면 그 기록이 열린다", opened === "CLICKED" && viewer === true, String(opened));
   await evaluate(`(() => { const v = document.querySelector('.viewer'); if (v) v.remove(); document.body.style.overflow=''; return true; })()`);
 }
+
+/* ---------- 8-2. 공유 단추 ----------
+   실제로 권한을 바꾸는 것은 로그인이 필요해 여기서 못 합니다.
+   여기서 보는 것은 «단추가 있고, 눌러도 터지지 않고, 연결 안 됐을 때 제대로 막히는가». */
+await evaluate(`(() => { const v = document.querySelector('.viewer'); if (v) v.remove();
+  const bg = document.querySelector('.modal-bg'); if (bg) bg.remove();
+  document.body.style.overflow = ''; return true; })()`);
+const viewerBtns = await evaluate(`(() => {
+  const b = Array.from(document.querySelectorAll('button')).find(b => (b.textContent||'').includes('전체 보기'));
+  if (!b) return 'NO_ENTRY';
+  b.click();
+  const top = document.querySelector('.viewer .vtop');
+  if (!top) return 'NO_VIEWER';
+  return Array.from(top.querySelectorAll('button, a')).map(e => e.textContent).join(' | ');
+})()`);
+check("전체 보기에 «링크로 공유» 가 있다", String(viewerBtns).includes("링크로 공유"), String(viewerBtns).slice(0, 70));
+
+const guarded = await evaluate(`(() => {
+  const b = Array.from(document.querySelectorAll('.viewer .vtop button')).find(b => b.textContent.includes('공유'));
+  if (!b) return 'NO_BUTTON';
+  b.click();
+  const t = document.getElementById('toast');
+  return (t && t.classList.contains('show')) ? t.textContent : (document.querySelector('.mbody') ? 'MODAL' : 'NOTHING');
+})()`);
+check("연결 전에는 공유가 막히고 이유를 말해 준다", /연결|저장/.test(String(guarded)), String(guarded));
+await evaluate(`(() => { const v = document.querySelector('.viewer'); if (v) v.remove();
+  document.body.style.overflow = ''; return true; })()`);
 
 /* ---------- 9. 끝난 뒤에도 오류가 없어야 한다 ---------- */
 check("끝까지 오류 없음", errors.length === 0 && logs.length === 0, [...errors, ...logs][0] || "");

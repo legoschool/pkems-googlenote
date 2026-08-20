@@ -517,6 +517,17 @@
   .modebar { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; flex-wrap: wrap; }
 
   /* 손 메모 판 — 손가락으로 그릴 때 화면이 같이 밀리면 안 된다 */
+  /* 공유 전 사진 확인 — 「가리는 걸 깜빡했다」를 막는 마지막 관문 */
+  .sharephotos { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px; }
+  .sharephoto { flex: none; }
+  .sharephoto img { width: 92px; height: 92px; object-fit: cover; border-radius: 8px;
+                    border: 1px solid var(--line); cursor: zoom-in; display: block; background: var(--bg); }
+  .checkline { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 13.5px;
+               font-weight: 700; cursor: pointer; }
+  .checkline input { width: 17px; height: 17px; }
+  .sharesep { font-size: 12.5px; font-weight: 700; color: var(--ink-soft);
+              border-top: 1px solid var(--line); padding-top: 12px; margin-top: 6px; }
+
   /* 폴더 구조 — 탐색기처럼 위에서 아래로 */
   /* 창이 낮아도 트리가 뭉개지지 않게 최소 높이를 준다. 모자라면 모달 쪽이 스크롤한다. */
   .treebox { border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
@@ -2101,7 +2112,8 @@
       mdId: n.mdId || null, mdName: n.mdName || null,
       docId: n.docId || null, htmlId: n.htmlId || null,
       folderId: n.folderId || null, folderName: n.folderName || null,
-      shareUrl: n.shareUrl || null
+      shareUrl: n.shareUrl || null,
+      shareFolderUrl: n.shareFolderUrl || null
     };
   }
   function findIndexFile() {
@@ -4361,12 +4373,37 @@
         return n.docId;
       });
   }
+  /* 이 기록에 붙은 사진들 (공유 전에 눈으로 확인시키려고 쓴다) */
+  function entryPhotos(n) {
+    return (n.blocks || []).filter(function (b) {
+      return b.kind === "image" && (b.fileId || b.blob);
+    });
+  }
+  /* 폴더째 공유해도 «남의 기록» 이 딸려가지 않는가.
+     기록마다 폴더 하나일 때만 그 폴더가 이 기록만의 것이다. */
+  function canShareFolder(n) {
+    if (settings.folderMode !== "perEntry") {
+      return { ok: false, why: "지금은 여러 기록이 한 폴더에 같이 있습니다 (정리 방식 «" +
+        (function () { var l = ""; FOLDER_MODES.forEach(function (f) { if (f.key === settings.folderMode) l = f.label; }); return l; })() +
+        "»). 폴더를 열면 다른 기록까지 보이므로 막아 두었습니다. 설정 → 저장 위치에서 «기록마다 폴더 하나» 로 바꾸면 됩니다." };
+    }
+    if (!n.folderId) {
+      return { ok: false, why: "이 기록은 아직 자기 폴더가 없습니다. 「기록 저장」을 한 번 더 누르면 폴더가 생깁니다." };
+    }
+    return { ok: true };
+  }
+
   function openShareModal(n, after) {
     if (!connected || !folder.id) { toast("드라이브에 연결한 뒤에 공유할 수 있습니다."); return; }
     if (!n.mdId) { toast("먼저 «기록 저장» 을 눌러 드라이브에 올린 뒤 공유할 수 있습니다."); return; }
     closeModal();
+
+    var photos = entryPhotos(n);
+    var checked = !photos.length;          // 사진이 없으면 확인 관문도 없다
+    var folderCheck = canShareFolder(n);
+
     var bg = el("div", "modal-bg");
-    var m = el("div", "card modal"); m.style.maxWidth = "560px";
+    var m = el("div", "card modal"); m.style.maxWidth = "600px";
 
     var head = el("div", "mhead");
     head.appendChild(el("h3", null, "🔗 링크로 공유"));
@@ -4377,76 +4414,152 @@
 
     var body = el("div", "mbody");
     var foot = el("div", "mfoot");
+    foot.appendChild(el("span", "spacer"));
+    var close = el("button", "btn", "닫기");
+    close.addEventListener("click", closeModal);
+    foot.appendChild(close);
     m.appendChild(body); m.appendChild(foot);
 
-    function draw() {
-      body.innerHTML = ""; foot.innerHTML = "";
-      body.appendChild(el("div", "desc", "「" + (n.title || "제목 없음") + "」"));
+    /* 공유를 켜고 끄는 한 칸. 글 하나용과 폴더용이 같은 모양이다. */
+    function shareRow(opt) {
+      var f = el("div", "field");
+      f.appendChild(el("label", null, opt.title));
+      f.appendChild(el("div", "desc", opt.desc));
 
-      if (n.shareUrl) {
-        var f = el("div", "field");
-        f.appendChild(el("label", null, "이 주소를 아는 사람은 누구나 읽을 수 있습니다"));
-        var inp = el("input", "inp"); inp.value = n.shareUrl; inp.readOnly = true;
-        inp.addEventListener("focus", function () { inp.select(); });
-        f.appendChild(inp);
+      if (!opt.allowed) {
+        var no = el("p", "crophint");
+        no.textContent = "⚠️ " + opt.blockedWhy;
+        f.appendChild(no);
         body.appendChild(f);
-        body.appendChild(el("p", "crophint",
-          "검색에는 걸리지 않습니다. 다만 링크가 한번 퍼지면 되돌릴 수 없으니, 필요 없어지면 «공유 끄기» 를 눌러 주세요."));
-
-        var off = el("button", "btn danger", "공유 끄기");
-        off.addEventListener("click", function () {
-          off.disabled = true; off.textContent = "끄는 중…";
-          stopSharing(n.docId)
-            .then(function () {
-              n.shareUrl = null; n.updatedAt = new Date().toISOString();
-              saveLocal(); if (connected) saveIndex();
-              toast("공유를 껐습니다. 이제 링크로는 열리지 않습니다.");
-              if (after) after();
-              draw();
-            })
-            .catch(function (e) { off.disabled = false; off.textContent = "공유 끄기"; toast("끄지 못했습니다: " + errText(e)); });
-        });
-        var cp = el("button", "btn primary", "📋 링크 복사");
-        cp.addEventListener("click", function () {
-          copyText(n.shareUrl).then(function () { toast("링크를 복사했습니다."); })
-            .catch(function () { toast("복사가 안 됩니다. 위 칸을 눌러 직접 복사해 주세요."); });
-        });
-        var op = el("a", "btn", "열어 보기");
-        op.href = n.shareUrl; op.target = "_blank"; op.rel = "noopener noreferrer"; op.style.textDecoration = "none";
-        foot.appendChild(off); foot.appendChild(el("span", "spacer")); foot.appendChild(op); foot.appendChild(cp);
         return;
       }
 
-      var warn = el("div", "field");
-      warn.appendChild(el("b", null, "⚠️ 공유하기 전에 한 번만 확인해 주세요."));
-      warn.appendChild(el("div", "desc",
-        "링크를 받은 사람은 이 기록 전체를 읽습니다 — 사진, 파일, 연결까지 모두. " +
-        "학생 얼굴이나 이름이 들어 있다면 먼저 «🔲 가리기» 로 지우고 다시 저장하세요."));
-      body.appendChild(warn);
-      body.appendChild(el("p", "crophint",
-        "공유되는 것은 이 기록의 구글 문서 사본입니다. 원본 폴더와 다른 기록은 열리지 않습니다."));
-
-      var go = el("button", "btn primary", "🔗 공유 링크 만들기");
-      go.addEventListener("click", function () {
-        go.disabled = true; go.textContent = "만드는 중…";
-        ensureDoc(n)
-          .then(function (docId) { return shareToAnyone(docId).then(function () { return docId; }); })
-          .then(function (docId) {
-            n.shareUrl = "https://docs.google.com/document/d/" + docId + "/edit?usp=sharing";
+      var url = opt.getUrl();
+      if (url) {
+        var inp = el("input", "inp"); inp.value = url; inp.readOnly = true;
+        inp.addEventListener("focus", function () { inp.select(); });
+        f.appendChild(inp);
+        var row = el("div", "row"); row.style.marginTop = "6px";
+        var cp = el("button", "btn sm primary", "📋 복사");
+        cp.addEventListener("click", function () {
+          copyText(url).then(function () { toast("링크를 복사했습니다."); })
+            .catch(function () { toast("복사가 안 됩니다. 위 칸을 눌러 직접 복사해 주세요."); });
+        });
+        var op = el("a", "btn sm", "열어 보기");
+        op.href = url; op.target = "_blank"; op.rel = "noopener noreferrer"; op.style.textDecoration = "none";
+        var off = el("button", "btn sm danger", "공유 끄기");
+        off.addEventListener("click", function () {
+          off.disabled = true; off.textContent = "끄는 중…";
+          opt.stop().then(function () {
+            opt.setUrl(null);
+            n.updatedAt = new Date().toISOString();
+            saveLocal(); if (connected) saveIndex();
+            toast("공유를 껐습니다. 이제 링크로는 열리지 않습니다.");
+            if (after) after();
+            draw();
+          }).catch(function (e) {
+            off.disabled = false; off.textContent = "공유 끄기";
+            toast("끄지 못했습니다: " + errText(e));
+          });
+        });
+        row.appendChild(cp); row.appendChild(op); row.appendChild(off);
+        f.appendChild(row);
+      } else {
+        var go = el("button", "btn primary", opt.button);
+        go.disabled = !checked;
+        if (!checked) go.title = "먼저 아래에서 사진을 확인해 주세요";
+        go.addEventListener("click", function () {
+          go.disabled = true; go.textContent = "만드는 중…";
+          opt.start().then(function (madeUrl) {
+            opt.setUrl(madeUrl);
             n.updatedAt = new Date().toISOString();
             saveLocal(); if (connected) saveIndex();
             if (after) after();
             draw();
-            copyText(n.shareUrl).then(function () { toast("공유 링크를 만들어 복사까지 했습니다."); })
+            copyText(madeUrl).then(function () { toast("공유 링크를 만들어 복사까지 했습니다."); })
               .catch(function () { toast("공유 링크를 만들었습니다."); });
-          })
-          .catch(function (e) {
-            go.disabled = false; go.textContent = "🔗 공유 링크 만들기";
+          }).catch(function (e) {
+            go.disabled = false; go.textContent = opt.button;
             toast("공유하지 못했습니다: " + errText(e));
           });
+        });
+        f.appendChild(go);
+      }
+      body.appendChild(f);
+    }
+
+    function draw() {
+      body.innerHTML = "";
+      body.appendChild(el("div", "desc", "「" + (n.title || "제목 없음") + "」"));
+
+      /* ---- 사진 확인 관문 ----
+         「가리는 것을 깜빡했다」가 진짜 사고다. 그래서 공유를 켜기 전에
+         이 기록의 사진을 전부 눈앞에 늘어놓고 한 번 확인시킨다. */
+      if (photos.length) {
+        var g = el("div", "field");
+        g.appendChild(el("label", null, "① 이 기록에 든 사진 " + photos.length + "장을 먼저 확인하세요"));
+        var strip = el("div", "sharephotos");
+        photos.forEach(function (b) {
+          var cell = el("div", "sharephoto");
+          var im = el("img");
+          var pv = previewUrl(b);
+          if (pv) im.src = pv; else if (b.fileId) loadDriveImage(b.fileId, im);
+          im.addEventListener("click", function () {
+            openLightbox([{ url: pv, fileId: b.fileId, caption: b.caption || "", name: b.original || "" }], 0);
+          });
+          cell.appendChild(im);
+          strip.appendChild(cell);
+        });
+        g.appendChild(strip);
+        g.appendChild(el("div", "crophint",
+          "눌러서 크게 볼 수 있습니다. 학생 얼굴·이름표가 보이면 창을 닫고 «✏️ 편집 → 🔲 가리기» 로 지운 뒤 다시 저장하세요."));
+
+        var lab = el("label", "checkline");
+        var cb = el("input"); cb.type = "checkbox"; cb.checked = checked;
+        cb.addEventListener("change", function () { checked = cb.checked; draw(); });
+        lab.appendChild(cb);
+        lab.appendChild(el("span", null, " 확인했습니다 — 남에게 보여도 되는 사진입니다"));
+        g.appendChild(lab);
+        body.appendChild(g);
+      }
+
+      body.appendChild(el("div", "sharesep", photos.length ? "② 무엇을 넘길지 고르세요" : "무엇을 넘길지 고르세요"));
+
+      shareRow({
+        title: "📄 글 하나만 — 구글 문서",
+        desc: "글·사진이 한 장으로 예쁘게 보입니다. 받는 사람은 로그인도 앱도 필요 없고, 폰에서도 그대로 열립니다.",
+        button: "🔗 글 공유 링크 만들기",
+        allowed: true,
+        getUrl: function () { return n.shareUrl; },
+        setUrl: function (u) { n.shareUrl = u; },
+        start: function () {
+          return ensureDoc(n)
+            .then(function (docId) { return shareToAnyone(docId).then(function () { return docId; }); })
+            .then(function (docId) { return "https://docs.google.com/document/d/" + docId + "/edit?usp=sharing"; });
+        },
+        stop: function () { return stopSharing(n.docId); }
       });
-      foot.appendChild(el("span", "spacer"));
-      foot.appendChild(go);
+
+      shareRow({
+        title: "📁 폴더 통째로 — 사진·파일까지",
+        desc: "이 기록의 드라이브 폴더를 통째로 엽니다. 원본 사진, 학습지, .md, HTML 파일까지 받는 사람이 내려받을 수 있습니다. 폴더는 지금 비공개이고, 누르는 순간 «링크가 있는 사람 = 읽기» 로 바뀝니다.",
+        button: "🔗 폴더 공유 링크 만들기",
+        allowed: folderCheck.ok,
+        blockedWhy: folderCheck.why,
+        getUrl: function () { return n.shareFolderUrl; },
+        setUrl: function (u) { n.shareFolderUrl = u; },
+        start: function () {
+          return shareToAnyone(n.folderId).then(function () {
+            return "https://drive.google.com/drive/folders/" + n.folderId + "?usp=sharing";
+          });
+        },
+        stop: function () { return stopSharing(n.folderId); }
+      });
+
+      body.appendChild(el("p", "crophint",
+        "검색에는 걸리지 않습니다. 다만 링크가 한번 퍼지면 되돌릴 수 없으니, 필요 없어지면 «공유 끄기» 를 눌러 주세요. " +
+        "HTML 파일은 드라이브에서 «웹페이지로» 열리지 않습니다 (구글이 2016년에 그 기능을 없앴습니다) — " +
+        "사람에게 보여줄 것은 구글 문서 쪽입니다."));
     }
     draw();
 
@@ -4493,12 +4606,13 @@
     if (n.mdId) linkBtn("📝 .md", driveLink(n.mdId), "마크다운 원본");
     if (n.folderId) linkBtn("📁 폴더", "https://drive.google.com/drive/folders/" + n.folderId, "이 기록의 드라이브 폴더");
 
-    var share = el("button", "btn sm", n.shareUrl ? "🔗 공유 중" : "🔗 링크로 공유");
-    if (n.shareUrl) share.title = n.shareUrl;
+    var shared = function () { return n.shareUrl || n.shareFolderUrl; };
+    var share = el("button", "btn sm", shared() ? "🔗 공유 중" : "🔗 링크로 공유");
+    if (shared()) share.title = shared();
     share.addEventListener("click", function () {
       openShareModal(n, function () {
-        share.textContent = n.shareUrl ? "🔗 공유 중" : "🔗 링크로 공유";
-        share.title = n.shareUrl || "";
+        share.textContent = shared() ? "🔗 공유 중" : "🔗 링크로 공유";
+        share.title = shared() || "";
         render();
       });
     });
