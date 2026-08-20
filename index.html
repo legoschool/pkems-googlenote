@@ -211,7 +211,8 @@
   /* ---------- 토스트/진행 ---------- */
   #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
            background: #1b2130; color: #fff; padding: 11px 18px; border-radius: 10px; font-size: 14px;
-           opacity: 0; pointer-events: none; transition: .22s; z-index: 100; max-width: 90vw; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+           opacity: 0; pointer-events: none; transition: .22s; z-index: 210; max-width: 90vw; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+           /* 210 인 이유: 「전체 보기」(140)·사진 창(160)·공유 창(170) 위에서도 알림이 보여야 한다 */
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   #progress { position: fixed; left: 0; top: 0; height: 3px; background: var(--brand); width: 0; transition: width .3s; z-index: 200; }
 
@@ -513,6 +514,7 @@
   .cropsize { position: absolute; left: 0; top: -22px; font-size: 11.5px; font-weight: 700; color: #fff;
               background: var(--brand); padding: 1px 7px; border-radius: 6px; white-space: nowrap; }
   .crophint { font-size: 12.5px; color: var(--ink-soft); margin: 10px 0 0; }
+  .modebar { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; flex-wrap: wrap; }
 
   /* 웹캠 미리보기 — 규칙이 없으면 1920x1080 원본이 그대로 나와 모달을 뚫는다 */
   .camview { display: block; width: 100%; height: auto; max-width: 100%; max-height: 58vh;
@@ -695,7 +697,10 @@
   var INDEX_NAME = "PKEMS-index.json";
   var SETTINGS_NAME = "PKEMS-settings.json";
   var MAX_FILE_MB = 200;
-  var RESUMABLE_CHUNK = 8 * 1024 * 1024;   // 8MB 씩 끊어서 올린다
+  var RESUMABLE_CHUNK = 8 * 1024 * 1024;   // PC 는 8MB 씩 끊어서 올린다
+  var MOBILE_CHUNK = 2 * 1024 * 1024;      // 폰은 2MB — 신호가 나쁠 때 되돌아갈 거리를 줄인다
+  var STALL_MS = 45000;                    // 45초 동안 한 바이트도 안 올라가면 끊고 다시 건다
+  var MAX_UPLOAD_RETRY = 6;                // 연달아 이만큼 실패하면 포기하고 «대기» 로 남긴다
 
   var DEFAULTS = {
     version: 1,
@@ -759,7 +764,9 @@
     draft: "pkems.draft.v1",
     folder: "pkems.folder",
     cid: "pkems.clientId",
-    connected: "pkems.connected"
+    connected: "pkems.connected",
+    token: "pkems.token.v1",     // 새로고침해도 로그인이 안 풀리게 (만료시각까지만)
+    email: "pkems.email"         // 다시 받을 때 계정 고르는 화면을 건너뛰려고
   };
   var TOMB_KEEP_DAYS = 120;
 
@@ -866,6 +873,7 @@
   var expanded = {};
 
   var tokenClient = null, accessToken = null, connected = false, userEmail = "";
+  var needReconnect = false;   // 토큰이 풀렸는데 조용히 다시 받지 못한 상태
   var indexFileId = null, settingsFileId = null, subFolderId = null;
   var imgUrlCache = {};
 
@@ -1031,24 +1039,95 @@
     tokenClient = google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: SCOPE, callback: function () {} });
     return true;
   }
+
+  /* ---- 토큰을 브라우저에 보관한다 ----
+     구글이 주는 토큰은 1시간짜리다. 예전에는 자바스크립트 변수에만 담아서
+     «새로고침 = 로그아웃» 이었다. 특히 폰에서 앱으로 설치해 쓰면
+     조용히 다시 받는 길(계정 쿠키)이 막혀 있어서 매번 풀렸다.
+     이제 만료시각까지 담아 두고, 남은 시간이 있으면 그대로 이어 쓴다.
+     ⚠️ 로그아웃하면 반드시 지운다. 이건 드라이브를 열 수 있는 열쇠다. */
+  function saveToken(tok, expiresIn) {
+    try {
+      var life = Number(expiresIn || 3600);
+      localStorage.setItem(LS.token, JSON.stringify({ t: tok, exp: Date.now() + (life - 120) * 1000 }));
+    } catch (e) { /* 저장 못 해도 이번 판은 쓸 수 있다 */ }
+  }
+  function loadToken() {
+    var s = safeParse(localStorage.getItem(LS.token));
+    return (s && s.t && s.exp > Date.now()) ? s.t : null;
+  }
+  function clearToken() {
+    accessToken = null;
+    try { localStorage.removeItem(LS.token); } catch (e) {}
+  }
+  function rememberEmail() {
+    try { if (userEmail) localStorage.setItem(LS.email, userEmail); } catch (e) {}
+  }
+
   function requestToken(interactive) {
     return new Promise(function (resolve, reject) {
       if (!tokenClient && !initTokenClient()) { reject(new Error("구글 로그인 준비 중입니다. 잠시 후 다시 눌러 주세요.")); return; }
       tokenClient.callback = function (r) {
         if (r && r.error) { reject(new Error(r.error_description || r.error)); return; }
         accessToken = r.access_token;
+        saveToken(r.access_token, r.expires_in);
+        needReconnect = false;
         resolve(accessToken);
       };
-      try { tokenClient.requestAccessToken({ prompt: interactive ? "consent" : "" }); }
+      var cfg = { prompt: interactive ? "consent" : "" };
+      // 전에 쓰던 계정을 알려 주면 «계정 고르기» 화면을 건너뛴다 (조용히 받을 확률도 올라간다)
+      var hint = localStorage.getItem(LS.email);
+      if (hint) cfg.hint = hint;
+      try { tokenClient.requestAccessToken(cfg); }
       catch (e) { reject(e); }
     });
   }
-  function driveFetch(url, opts, retried) {
+
+  /* ---- 「방금 눌렀는가」 를 기억한다 ----
+     구글 토큰 라이브러리는 «조용히 받기» 라는 길이 없다. 부르면 무조건 팝업을 연다.
+     사용자가 아무것도 안 눌렀는데 팝업을 열면 브라우저가 «내가 안 시킨 창» 으로 보고 막는다.
+     ← 폰에서 로그인이 풀린 것처럼 보이던 진짜 이유가 이것이다.
+     그래서 «최근에 누른 적이 있을 때만» 부르고, 아니면 «다시 연결» 띠로 넘긴다. */
+  var lastGestureAt = 0;
+  ["pointerdown", "keydown", "touchstart"].forEach(function (ev) {
+    document.addEventListener(ev, function () { lastGestureAt = Date.now(); }, true);
+  });
+  function canOpenPopup() { return Date.now() - lastGestureAt < 60000; }
+
+  /* 조용히 다시 받아 본다. 실패하면 «다시 연결» 띠를 띄우고 조용히 물러난다.
+     예전에는 실패해도 아무 말이 없어서 «그냥 로그아웃된 것»처럼 보였다. */
+  function renewQuietly() {
+    if (!canOpenPopup()) {
+      needReconnect = true; clearToken(); updateChrome();
+      return Promise.reject(new Error("연결이 풀렸습니다. 위쪽 [다시 연결] 을 눌러 주세요."));
+    }
+    return requestToken(false).catch(function (e) {
+      needReconnect = true;
+      clearToken();
+      updateChrome();
+      throw e;
+    });
+  }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // 구글이 «잠깐 쉬어라»(429·5xx·사용량 초과) 라고 하면 기다렸다 다시 건다
+  function shouldBackoff(res) {
+    if (res.status === 429 || res.status >= 500) return true;
+    return false;
+  }
+  function driveFetch(url, opts, tried) {
     opts = opts || {};
     opts.headers = opts.headers || {};
     opts.headers["Authorization"] = "Bearer " + accessToken;
+    tried = tried || 0;
     return fetch(url, opts).then(function (res) {
-      if (res.status === 401 && !retried) return requestToken(false).then(function () { return driveFetch(url, opts, true); });
+      if (res.status === 401 && tried === 0) {
+        return renewQuietly().then(function () { return driveFetch(url, opts, 1); });
+      }
+      if (shouldBackoff(res) && tried < 4) {
+        return sleep(Math.min(8000, 500 * Math.pow(2, tried)) + Math.random() * 400)
+          .then(function () { return driveFetch(url, opts, tried + 1); });
+      }
       return res;
     });
   }
@@ -1060,10 +1139,22 @@
       });
     });
   }
+  /* 「다시 연결」 한 번 눌러 되살리기.
+     조용히 받아 보고, 안 되면 그때만 구글 화면을 띄운다. */
+  function reconnect() {
+    needReconnect = false; updateChrome();
+    return requestToken(false)
+      .catch(function () { return requestToken(true); })
+      .then(function () { return connect(); })
+      .catch(function (e) {
+        needReconnect = true; updateChrome();
+        toast("다시 연결하지 못했습니다: " + errText(e));
+      });
+  }
   function ensureAccount() {
     return driveFetch("https://www.googleapis.com/oauth2/v3/userinfo")
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (i) { if (i && i.email) userEmail = i.email; })
+      .then(function (i) { if (i && i.email) { userEmail = i.email; rememberEmail(); } })
       .catch(function () {});
   }
 
@@ -1175,9 +1266,35 @@
       body: body
     });
   }
+  /* ---- 화면이 꺼지지 않게 붙잡아 둔다 ----
+     폰은 화면이 꺼지면 브라우저를 얼려서 업로드가 그 자리에 멈춘다.
+     올리는 동안만 깨워 두고, 끝나면 바로 놓아 준다. */
+  var wakeLock = null, wakeHolders = 0;
+  function keepAwake() {
+    wakeHolders++;
+    if (wakeLock || !navigator.wakeLock) return;
+    navigator.wakeLock.request("screen")
+      .then(function (w) {
+        if (!wakeHolders) { w.release(); return; }
+        wakeLock = w;
+        w.addEventListener("release", function () { wakeLock = null; });
+      })
+      .catch(function () { /* 못 잡아도 업로드는 그대로 한다 */ });
+  }
+  function releaseAwake() {
+    wakeHolders = Math.max(0, wakeHolders - 1);
+    if (wakeHolders === 0 && wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+  }
+  // 화면이 다시 켜지면 잠금이 풀려 있다. 아직 올리는 중이면 다시 잡는다.
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && wakeHolders > 0 && !wakeLock && navigator.wakeLock) {
+      navigator.wakeLock.request("screen").then(function (w) { wakeLock = w; }).catch(function () {});
+    }
+  });
+
   /* ---- 큰 파일용: 조각내어 올리는 업로드 ----
      base64 로 통째로 만들면 200MB 파일에서 브라우저가 죽습니다.
-     Blob 을 그대로 8MB 씩 끊어 보냅니다.                       */
+     Blob 을 그대로 끊어 보냅니다.                       */
   function uploadBlob(name, mime, blob, parentId, fileId, onProgress) {
     var meta = fileId ? { name: name } : { name: name, mimeType: mime || "application/octet-stream", parents: [parentId] };
     var url = "https://www.googleapis.com/upload/drive/v3/files" + (fileId ? "/" + fileId : "") +
@@ -1196,47 +1313,140 @@
       }
       var loc = res.headers.get("Location") || res.headers.get("location");
       if (!loc) throw new Error("NO_LOCATION");
-      return putChunks(loc, blob, onProgress);
+      keepAwake();
+      return putChunks(loc, blob, onProgress)
+        .then(function (r) { releaseAwake(); return r; },
+              function (e) { releaseAwake(); throw e; });
     });
   }
+
+  /* ---- 조각 하나를 보낸다 ----
+     ⚠️ fetch 가 아니라 XMLHttpRequest 를 쓴다. fetch 는 «올라가는 중» 진행률을
+        알려줄 방법이 아예 없어서, 조각 하나가 끝날 때까지 화면이 멈춰 보였다.
+        폰에서 8MB 한 조각은 20~60초다 — 그동안 0% 에 붙어 있었던 것.
+     또 하나: 신호가 끊기면 요청이 오류도 없이 영원히 매달린다.
+        일정 시간 아무 바이트도 안 올라가면 끊고 다시 건다. */
+  function putChunk(sessionUrl, body, contentRange, onBytes) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest(), timer = null, dead = false;
+      function arm() {
+        clearTimeout(timer);
+        timer = setTimeout(function () { dead = true; try { xhr.abort(); } catch (e) {} }, STALL_MS);
+      }
+      function done() { clearTimeout(timer); }
+      xhr.open("PUT", sessionUrl, true);
+      xhr.setRequestHeader("Authorization", "Bearer " + accessToken);
+      xhr.setRequestHeader("Content-Range", contentRange);
+      if (xhr.upload) {
+        xhr.upload.onprogress = function (e) {
+          arm();                                   // 올라가고 있으면 시계를 다시 감는다
+          if (e.lengthComputable && onBytes) onBytes(e.loaded);
+        };
+      }
+      xhr.onload = function () {
+        done();
+        resolve({
+          status: xhr.status,
+          range: xhr.getResponseHeader("Range") || xhr.getResponseHeader("range") || "",
+          text: xhr.responseText || ""
+        });
+      };
+      xhr.onerror = function () { done(); reject(new Error("NET")); };
+      xhr.onabort = function () { done(); reject(new Error(dead ? "STALL" : "ABORT")); };
+      arm();
+      xhr.send(body);
+    });
+  }
+
   function putChunks(sessionUrl, blob, onProgress) {
     var total = blob.size;
+    // 폰에서는 조각을 작게 쪼갠다. 신호가 나빠 한 조각이 통째로 날아가는 손해를 줄인다.
+    var chunk = isTouchDevice() ? MOBILE_CHUNK : RESUMABLE_CHUNK;
     if (!total) {
-      return fetch(sessionUrl, { method: "PUT", headers: { "Authorization": "Bearer " + accessToken } })
-        .then(function (r) { return r.json(); });
+      return putChunk(sessionUrl, null, "bytes */0", null).then(function (r) { return safeParse(r.text) || {}; });
     }
-    // 조각 하나를 보낸다. 토큰이 만료돼 401 이 오면 한 번 새로 받아 다시 보낸다.
-    function send(start, retried) {
-      var end = Math.min(start + RESUMABLE_CHUNK, total);
-      return fetch(sessionUrl, {
-        method: "PUT",
-        headers: {
-          "Authorization": "Bearer " + accessToken,
-          "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total
-        },
-        body: blob.slice(start, end)
-      }).then(function (r) {
-        if ((r.status === 401 || r.status === 403) && !retried) {
-          return requestToken(false).then(function () { return send(start, true); });
-        }
+    var report = function (bytes) { if (onProgress) onProgress(Math.min(1, bytes / total)); };
+
+    // 서버에게 «어디까지 받았느냐» 고 물어본다. 끊겼던 자리를 정확히 찾아 거기서 잇는다.
+    function askPosition() {
+      return putChunk(sessionUrl, null, "bytes */" + total, null).then(function (r) {
+        if (r.status === 200 || r.status === 201) return { finished: safeParse(r.text) || {} };
         if (r.status === 308) {
-          var range = r.headers.get("Range") || r.headers.get("range");
-          var next = range ? (parseInt(range.split("-")[1], 10) + 1) : end;
-          if (onProgress) onProgress(next / total);
-          return send(next);
+          var m = /(\d+)\s*$/.exec(r.range || "");
+          return { at: m ? Number(m[1]) + 1 : 0 };
         }
-        if (!r.ok) {
-          return r.text().then(function (t) {
-            var why = "";
-            try { var j = JSON.parse(t); why = (j.error && j.error.message) || ""; } catch (e) {}
-            throw new Error("업로드 실패 (" + r.status + (why ? " · " + why : "") + ")");
-          });
-        }
-        if (onProgress) onProgress(1);
-        return r.json();
+        if (r.status === 404) throw new Error("업로드 자리가 만료됐습니다. [동기화] 를 다시 눌러 주세요.");
+        throw new Error("업로드 상태 확인 실패 (" + r.status + ")");
       });
     }
-    return send(0);
+
+    function why(text, status) {
+      var m = "";
+      try { var j = JSON.parse(text); m = (j.error && j.error.message) || ""; } catch (e) {}
+      return "업로드 실패 (" + status + (m ? " · " + m : "") + ")";
+    }
+
+    // start 부터 이어 보낸다. fails 는 «연달아» 실패한 횟수 — 나아가면 0 으로 되돌린다.
+    function step(start, fails) {
+      var end = Math.min(start + chunk, total);
+      return putChunk(sessionUrl, blob.slice(start, end), "bytes " + start + "-" + (end - 1) + "/" + total,
+        function (loaded) { report(start + loaded); })
+        .then(function (r) {
+          if (r.status === 308) {
+            var m = /(\d+)\s*$/.exec(r.range || "");
+            var next = m ? Number(m[1]) + 1 : end;
+            report(next);
+            return next >= total ? askPosition().then(function (p) { return p.finished || {}; }) : step(next, 0);
+          }
+          if (r.status === 200 || r.status === 201) { report(total); return safeParse(r.text) || {}; }
+          if (r.status === 401) {
+            return renewQuietly().then(function () { return step(start, fails); });
+          }
+          // 429·5xx·사용량 초과 — 기다렸다 «받은 데까지» 확인하고 이어 붙인다
+          if (r.status === 429 || r.status >= 500 || (r.status === 403 && /rate|quota|limit/i.test(r.text))) {
+            if (fails >= MAX_UPLOAD_RETRY) throw new Error(why(r.text, r.status));
+            return waitThenResume(fails);
+          }
+          throw new Error(why(r.text, r.status));
+        })
+        .catch(function (e) {
+          // 끊김·멈춤은 «실패» 가 아니라 «다시 붙이면 되는 일» 이다
+          var soft = e && (e.message === "NET" || e.message === "STALL" || e.message === "ABORT");
+          if (!soft || fails >= MAX_UPLOAD_RETRY) {
+            if (soft) throw new Error("연결이 끊겨 업로드를 잇지 못했습니다. [동기화] 를 다시 눌러 주세요.");
+            throw e;
+          }
+          return waitThenResume(fails);
+        });
+
+      function waitThenResume(n) {
+        var wait = Math.min(15000, 800 * Math.pow(2, n)) + Math.random() * 500;
+        if (onProgress) onProgress(-1);   // «잠시 기다리는 중» 표시
+        return sleep(wait)
+          .then(waitOnline)
+          .then(askPosition)
+          .then(function (p) {
+            if (p.finished) { report(total); return p.finished; }
+            report(p.at);
+            return step(p.at, n + 1);
+          });
+      }
+    }
+
+    // 비행기 모드·지하철처럼 아예 끊긴 상태면, 돌아올 때까지 기다렸다 잇는다
+    function waitOnline() {
+      if (navigator.onLine !== false) return Promise.resolve();
+      return new Promise(function (res) {
+        var t = setTimeout(go, 20000);
+        function go() { clearTimeout(t); window.removeEventListener("online", go); res(); }
+        window.addEventListener("online", go);
+      });
+    }
+
+    return askPosition().then(function (p) {
+      if (p.finished) { report(total); return p.finished; }
+      return step(p.at || 0, 0);
+    });
   }
   // 오류를 사람이 읽을 수 있는 한 줄로 — ProgressEvent 처럼 message 가 없는 것도 있다
   function errText(e) {
@@ -1268,7 +1478,10 @@
     var mime = b.mime || "application/octet-stream";
     return uploadBlob(b.name, mime, b.blob, parentId, null, onProgress)
       .catch(function (e) {
-        if (b.blob.size > 25 * 1024 * 1024) throw e;   // 큰 파일은 대안이 없다
+        // 예전 방식은 파일을 통째로 base64 로 부풀린다(1.4배). 폰에서는 그것만으로 브라우저가 죽어서
+        // 한도를 훨씬 낮게 잡는다. 여기까지 왔다는 건 이미 여러 번 이어 붙이기를 시도한 뒤다.
+        var lastResortMax = (isTouchDevice() ? 4 : 25) * 1024 * 1024;
+        if (b.blob.size > lastResortMax) throw e;
         console.warn("조각 업로드 실패, 예전 방식으로 재시도", e);
         return blobToBase64(b.blob).then(function (b64) {
           return uploadFile(b.name, mime, b64, true, null, parentId);
@@ -1528,6 +1741,44 @@
   }
   function driveLink(id) { return "https://drive.google.com/file/d/" + id + "/view"; }
 
+  /* ---------- 링크로 공유 ----------
+     구글 문서에 «링크가 있는 사람 = 읽기» 권한을 얹고 그 주소를 준다.
+     ⚠️ HTML 파일로는 안 된다. 드라이브는 2016년에 웹페이지로 열어주는 기능을 없앴다.
+        .md 도 글자만 보이는 화면이라, 사람에게 보내는 것은 구글 문서가 맞다. */
+  function shareToAnyone(fileId) {
+    return driveJson("https://www.googleapis.com/drive/v3/files/" + fileId +
+      "/permissions?supportsAllDrives=true&fields=id", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" })
+    });
+  }
+  function stopSharing(fileId) {
+    return driveJson("https://www.googleapis.com/drive/v3/files/" + fileId +
+      "/permissions?supportsAllDrives=true&fields=permissions(id,type)")
+      .then(function (j) {
+        var open = (j.permissions || []).filter(function (p) { return p.type === "anyone"; });
+        return open.reduce(function (chain, p) {
+          return chain.then(function () {
+            return driveFetch("https://www.googleapis.com/drive/v3/files/" + fileId +
+              "/permissions/" + p.id + "?supportsAllDrives=true", { method: "DELETE" });
+          });
+        }, Promise.resolve());
+      });
+  }
+  function copyText(s) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(s);
+    return new Promise(function (res, rej) {
+      var ta = document.createElement("textarea");
+      ta.value = s; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      ta.remove();
+      ok ? res() : rej(new Error("복사하지 못했습니다"));
+    });
+  }
+
   /* 블록 → 마크다운 본문 줄들. h 는 소제목 단계(2 = "##").
      기록 한 편을 그대로 뽑을 때와, 여러 편을 한 권으로 엮을 때 같이 쓴다. */
   // base: 사진·첨부의 상대경로 앞에 붙일 폴더 (엮어내기에서 쓴다).
@@ -1769,7 +2020,8 @@
       createdAt: n.createdAt, updatedAt: n.updatedAt,
       mdId: n.mdId || null, mdName: n.mdName || null,
       docId: n.docId || null, htmlId: n.htmlId || null,
-      folderId: n.folderId || null, folderName: n.folderName || null
+      folderId: n.folderId || null, folderName: n.folderName || null,
+      shareUrl: n.shareUrl || null
     };
   }
   function findIndexFile() {
@@ -1887,11 +2139,14 @@
             });
             return pending.reduce(function (p, b) {
               return p.then(function () {
-                var big = b.blob.size > 6 * 1024 * 1024;
-                if (big) setSyncPill("↑ " + b.name.slice(0, 14) + "… 0%", true);
-                return uploadAttachment(b, t.file, big ? function (f) {
-                  setSyncPill("↑ " + b.name.slice(0, 14) + "… " + Math.round(f * 100) + "%", true);
-                } : null)
+                // 진행률은 «큰 파일만» 이 아니라 항상 보여 준다.
+                // 폰에서는 1MB 짜리도 몇십 초가 걸리는데, 아무 표시가 없으면 멈춘 줄 안다.
+                var label = b.name.length > 14 ? b.name.slice(0, 14) + "…" : b.name;
+                setSyncPill("↑ " + label + " 0%", true);
+                return uploadAttachment(b, t.file, function (f) {
+                  if (f < 0) { setSyncPill("↑ " + label + " 연결을 기다리는 중…", true); return; }
+                  setSyncPill("↑ " + label + " " + Math.round(f * 100) + "%", true);
+                })
                   .then(function (r) {
                     b.fileId = r.id; delete b.blob; dropPreview(b.id);
                     n._dirty = true; idbDel(b.id);
@@ -2244,6 +2499,14 @@
         cap.placeholder = "설명·캡션(선택)"; cap.value = b.caption || "";
         cap.addEventListener("input", function () { b.caption = cap.value; });
         info.appendChild(cap);
+        // 학생 얼굴·이름표를 나중에라도 가릴 수 있게. 올라가기 전이라야 한다.
+        if (b.kind === "image" && !b.fileId && b.blob) {
+          var maskBtn = el("button", "btn sm", "🔲 가리기");
+          maskBtn.style.marginTop = "6px";
+          maskBtn.title = "얼굴·이름표 같은 곳을 모자이크로 가립니다";
+          (function (blk) { maskBtn.addEventListener("click", function () { openMaskForBlock(blk); }); })(b);
+          info.appendChild(maskBtn);
+        }
         m.appendChild(info);
         body.appendChild(m);
       }
@@ -2522,9 +2785,33 @@
     });
   }
 
-  function openCropModal(canvas, srcName) {
+  /* 이미 넣어 둔 사진을 다시 열어 가리기.
+     아직 안 올라간 사진만 다룬다. 올라간 뒤에 고치면 드라이브 파일과 어긋나기 때문. */
+  function openMaskForBlock(b) {
+    var url = previewUrl(b);
+    if (!url) { toast("이 사진은 이미 드라이브에 올라가 있어 여기서 가릴 수 없습니다."); return; }
+    var im = new Image();
+    im.onload = function () {
+      var c = document.createElement("canvas");
+      c.width = im.naturalWidth; c.height = im.naturalHeight;
+      c.getContext("2d").drawImage(im, 0, 0);
+      // 여러 번 가려도 이름에 «_잘라냄» 이 겹겹이 붙지 않게 한 번만 남긴다
+      openCropModal(c, String(b.original || "").replace(/(_잘라냄)+(\.[^.]+)?$/, "$2"), b);
+    };
+    im.onerror = function () { toast("사진을 열지 못했습니다."); };
+    im.src = url;
+  }
+
+  function openCropModal(canvas, srcName, replaceBlock) {
     closeModal();
     var full = canvas;
+    /* 모자이크는 «원본을 그대로 두고 가린 자리 목록만» 들고 있다가 매번 다시 그린다.
+       그래야 되돌리기가 공짜다. 지운 자리는 원본에서 지워지므로 올라가는 파일에는 남지 않는다. */
+    var orig = document.createElement("canvas");
+    orig.width = full.width; orig.height = full.height;
+    orig.getContext("2d").drawImage(full, 0, 0);
+    var mosaics = [];
+    var mode = replaceBlock ? "mask" : "crop";   // "crop" 또는 "mask"
     var bg = el("div", "modal-bg");
     var m = el("div", "card modal"); m.style.maxWidth = "min(960px, 96vw)";
 
@@ -2536,6 +2823,14 @@
     m.appendChild(head);
 
     var body = el("div", "mbody"); body.style.textAlign = "center";
+
+    /* --- 하는 일 고르기: 자르기 / 가리기 --- */
+    var modeBar = el("div", "modebar");
+    var bCrop = el("button", "btn sm primary", "✂️ 자르기");
+    var bMask = el("button", "btn sm", "🔲 모자이크로 가리기");
+    modeBar.appendChild(bCrop); modeBar.appendChild(bMask);
+    body.appendChild(modeBar);
+
     var wrap = el("div", "cropwrap");
     var img = el("img");
     img.src = full.toDataURL("image/png");
@@ -2544,8 +2839,8 @@
     var sizeTag = el("div", "cropsize"); sel.appendChild(sizeTag);
     wrap.appendChild(img); wrap.appendChild(sel);
     body.appendChild(wrap);
-    body.appendChild(el("p", "crophint",
-      "이미지 위에서 드래그해 저장할 영역을 고르세요. 그냥 전체를 쓰려면 «전체 사용»을 누르면 됩니다."));
+    var hint = el("p", "crophint", "");
+    body.appendChild(hint);
     m.appendChild(body);
 
     var foot = el("div", "mfoot");
@@ -2557,10 +2852,52 @@
     again.addEventListener("click", function () { closeModal(); setTimeout(openCaptureSheet, 200); });
     var whole = el("button", "btn", "전체 사용");
     whole.addEventListener("click", function () { useRegion(0, 0, full.width, full.height); });
+    var undo = el("button", "btn", "↩ 마지막 가린 것 되돌리기");
+    undo.style.display = "none";
+    undo.addEventListener("click", function () { mosaics.pop(); repaint(); syncMode(); });
     var useSel = el("button", "btn primary", "선택 영역 사용");
     useSel.disabled = true;
-    foot.appendChild(again); foot.appendChild(whole); foot.appendChild(useSel);
+    foot.appendChild(again); foot.appendChild(undo); foot.appendChild(whole); foot.appendChild(useSel);
     m.appendChild(foot);
+
+    /* --- 모자이크 --- */
+    function paintMosaic(ctx, r) {
+      // 잘게 줄였다가 매끄럽게 하지 않고 다시 키우면 «네모칸» 이 된다
+      // 칸이 잘면 원래 그림이 비쳐 보인다. 얼굴·이름표를 가리는 것이 목적이라 굵게 잡는다.
+      var cell = Math.max(6, Math.round(Math.max(r.w, r.h) / 10));
+      var tw = Math.max(1, Math.round(r.w / cell)), th = Math.max(1, Math.round(r.h / cell));
+      var t = document.createElement("canvas");
+      t.width = tw; t.height = th;
+      var tc = t.getContext("2d");
+      tc.imageSmoothingEnabled = false;
+      tc.drawImage(orig, r.x, r.y, r.w, r.h, 0, 0, tw, th);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(t, 0, 0, tw, th, r.x, r.y, r.w, r.h);
+      ctx.imageSmoothingEnabled = true;
+    }
+    function repaint() {
+      var ctx = full.getContext("2d");
+      ctx.clearRect(0, 0, full.width, full.height);
+      ctx.drawImage(orig, 0, 0);
+      mosaics.forEach(function (r) { paintMosaic(ctx, r); });
+      img.src = full.toDataURL("image/png");
+      rect = null; paintSel();
+    }
+    function syncMode() {
+      var masking = mode === "mask";
+      bCrop.className = masking ? "btn sm" : "btn sm primary";
+      bMask.className = masking ? "btn sm primary" : "btn sm";
+      undo.style.display = (masking && mosaics.length) ? "" : "none";
+      useSel.textContent = masking ? "이 부분 가리기" : "선택 영역 사용";
+      whole.textContent = masking ? "가린 채로 전체 사용" : "전체 사용";
+      head.firstChild.textContent = masking ? "🔲 가릴 곳 고르기" : "📸 캡처 영역 고르기";
+      hint.textContent = masking
+        ? "얼굴·이름표처럼 가릴 곳을 드래그한 뒤 «이 부분 가리기» 를 누르세요. 여러 곳을 이어서 가릴 수 있습니다. 가린 것은 올라가는 사진 자체에서 지워집니다."
+        : "이미지 위에서 드래그해 저장할 영역을 고르세요. 그냥 전체를 쓰려면 «전체 사용»을 누르면 됩니다.";
+      paintSel();
+    }
+    bCrop.addEventListener("click", function () { mode = "crop"; syncMode(); });
+    bMask.addEventListener("click", function () { mode = "mask"; syncMode(); });
 
     bg.appendChild(m);
     bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
@@ -2614,8 +2951,15 @@
     useSel.addEventListener("click", function () {
       if (!rect) return;
       var s = full.width / img.clientWidth;
-      useRegion(Math.round(rect.x * s), Math.round(rect.y * s), Math.round(rect.w * s), Math.round(rect.h * s));
+      var r = { x: Math.round(rect.x * s), y: Math.round(rect.y * s), w: Math.round(rect.w * s), h: Math.round(rect.h * s) };
+      if (mode === "mask") {
+        mosaics.push(r); repaint(); syncMode();
+        toast("가렸습니다. 더 가릴 곳이 있으면 이어서 드래그하세요.");
+        return;
+      }
+      useRegion(r.x, r.y, r.w, r.h);
     });
+    syncMode();
 
     function useRegion(sx, sy, sw, sh) {
       sw = Math.max(1, Math.min(sw, full.width - sx));
@@ -2624,6 +2968,19 @@
       c.width = sw; c.height = sh;
       c.getContext("2d").drawImage(full, sx, sy, sw, sh, 0, 0, sw, sh);
       canvasToAttachment(c, srcName).then(function (att) {
+        if (replaceBlock) {
+          // 같은 자리에 그대로 갈아 끼운다. 캡션·순서는 건드리지 않는다.
+          dropPreview(replaceBlock.id);
+          replaceBlock.original = att.original;
+          replaceBlock.mime = att.mime;
+          replaceBlock.size = att.size;
+          replaceBlock.blob = att.blob;
+          idbPut(replaceBlock.id, att.blob);
+          renderBlocks();
+          closeModal();
+          toast("가린 사진으로 바꿨습니다. (" + humanSize(att.size) + ")");
+          return;
+        }
         blocks.push(newBlock("image", att));
         renderBlocks();
         closeModal();
@@ -3466,6 +3823,113 @@
      전체 보기 — 한 편을 통째로, 종이처럼 읽는 화면
      여기서 인쇄(PDF)·구글 문서·HTML·.md·폴더로 모두 이어진다
      --------------------------------------------------------- */
+  /* ---------- 🔗 링크로 공유 ---------- */
+  function ensureDoc(n) {
+    if (n.docId) return Promise.resolve(n.docId);
+    return resolveTargets(n)
+      .then(function (t) { return saveAsGoogleDoc(n, t.md); })
+      .then(function () {
+        if (!n.docId) throw new Error("구글 문서를 만들지 못했습니다. 설정 → 파일 이름 에서 «구글 문서» 를 켜 보세요.");
+        return n.docId;
+      });
+  }
+  function openShareModal(n, after) {
+    if (!connected || !folder.id) { toast("드라이브에 연결한 뒤에 공유할 수 있습니다."); return; }
+    if (!n.mdId) { toast("먼저 «기록 저장» 을 눌러 드라이브에 올린 뒤 공유할 수 있습니다."); return; }
+    closeModal();
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "560px";
+
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "🔗 링크로 공유"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody");
+    var foot = el("div", "mfoot");
+    m.appendChild(body); m.appendChild(foot);
+
+    function draw() {
+      body.innerHTML = ""; foot.innerHTML = "";
+      body.appendChild(el("div", "desc", "「" + (n.title || "제목 없음") + "」"));
+
+      if (n.shareUrl) {
+        var f = el("div", "field");
+        f.appendChild(el("label", null, "이 주소를 아는 사람은 누구나 읽을 수 있습니다"));
+        var inp = el("input", "inp"); inp.value = n.shareUrl; inp.readOnly = true;
+        inp.addEventListener("focus", function () { inp.select(); });
+        f.appendChild(inp);
+        body.appendChild(f);
+        body.appendChild(el("p", "crophint",
+          "검색에는 걸리지 않습니다. 다만 링크가 한번 퍼지면 되돌릴 수 없으니, 필요 없어지면 «공유 끄기» 를 눌러 주세요."));
+
+        var off = el("button", "btn danger", "공유 끄기");
+        off.addEventListener("click", function () {
+          off.disabled = true; off.textContent = "끄는 중…";
+          stopSharing(n.docId)
+            .then(function () {
+              n.shareUrl = null; n.updatedAt = new Date().toISOString();
+              saveLocal(); if (connected) saveIndex();
+              toast("공유를 껐습니다. 이제 링크로는 열리지 않습니다.");
+              if (after) after();
+              draw();
+            })
+            .catch(function (e) { off.disabled = false; off.textContent = "공유 끄기"; toast("끄지 못했습니다: " + errText(e)); });
+        });
+        var cp = el("button", "btn primary", "📋 링크 복사");
+        cp.addEventListener("click", function () {
+          copyText(n.shareUrl).then(function () { toast("링크를 복사했습니다."); })
+            .catch(function () { toast("복사가 안 됩니다. 위 칸을 눌러 직접 복사해 주세요."); });
+        });
+        var op = el("a", "btn", "열어 보기");
+        op.href = n.shareUrl; op.target = "_blank"; op.rel = "noopener noreferrer"; op.style.textDecoration = "none";
+        foot.appendChild(off); foot.appendChild(el("span", "spacer")); foot.appendChild(op); foot.appendChild(cp);
+        return;
+      }
+
+      var warn = el("div", "field");
+      warn.appendChild(el("b", null, "⚠️ 공유하기 전에 한 번만 확인해 주세요."));
+      warn.appendChild(el("div", "desc",
+        "링크를 받은 사람은 이 기록 전체를 읽습니다 — 사진, 파일, 연결까지 모두. " +
+        "학생 얼굴이나 이름이 들어 있다면 먼저 «🔲 가리기» 로 지우고 다시 저장하세요."));
+      body.appendChild(warn);
+      body.appendChild(el("p", "crophint",
+        "공유되는 것은 이 기록의 구글 문서 사본입니다. 원본 폴더와 다른 기록은 열리지 않습니다."));
+
+      var go = el("button", "btn primary", "🔗 공유 링크 만들기");
+      go.addEventListener("click", function () {
+        go.disabled = true; go.textContent = "만드는 중…";
+        ensureDoc(n)
+          .then(function (docId) { return shareToAnyone(docId).then(function () { return docId; }); })
+          .then(function (docId) {
+            n.shareUrl = "https://docs.google.com/document/d/" + docId + "/edit?usp=sharing";
+            n.updatedAt = new Date().toISOString();
+            saveLocal(); if (connected) saveIndex();
+            if (after) after();
+            draw();
+            copyText(n.shareUrl).then(function () { toast("공유 링크를 만들어 복사까지 했습니다."); })
+              .catch(function () { toast("공유 링크를 만들었습니다."); });
+          })
+          .catch(function (e) {
+            go.disabled = false; go.textContent = "🔗 공유 링크 만들기";
+            toast("공유하지 못했습니다: " + errText(e));
+          });
+      });
+      foot.appendChild(el("span", "spacer"));
+      foot.appendChild(go);
+    }
+    draw();
+
+    bg.appendChild(m);
+    // 「전체 보기」(z-index 140) 위에서 열리는 창이라 그보다 높이 올려야 보인다
+    bg.style.zIndex = "170";
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+  }
+
   var viewerEl = null;
   function closeViewer() {
     if (!viewerEl) return;
@@ -3500,6 +3964,17 @@
     if (n.htmlId) linkBtn("🌐 HTML 파일", driveLink(n.htmlId), "드라이브에 저장된 HTML 파일");
     if (n.mdId) linkBtn("📝 .md", driveLink(n.mdId), "마크다운 원본");
     if (n.folderId) linkBtn("📁 폴더", "https://drive.google.com/drive/folders/" + n.folderId, "이 기록의 드라이브 폴더");
+
+    var share = el("button", "btn sm", n.shareUrl ? "🔗 공유 중" : "🔗 링크로 공유");
+    if (n.shareUrl) share.title = n.shareUrl;
+    share.addEventListener("click", function () {
+      openShareModal(n, function () {
+        share.textContent = n.shareUrl ? "🔗 공유 중" : "🔗 링크로 공유";
+        share.title = n.shareUrl || "";
+        render();
+      });
+    });
+    top.appendChild(share);
 
     var edit = el("button", "btn sm", "✏️ 편집");
     edit.addEventListener("click", function () { closeViewer(); loadIntoComposer(n); });
@@ -4043,6 +4518,20 @@
     $("btnLogin").textContent = connected ? "동기화" : "구글 로그인";
     var b = $("banner");
     b.innerHTML = "";
+    /* 폴더는 그대로인데 열쇠만 풀린 상태 — «처음 쓰는 사람» 안내를 띄우면 안 된다.
+       한 번 눌러 되살리는 띠를 대신 보여 준다. */
+    if (!connected && needReconnect && folder.id) {
+      b.className = "banner warn";
+      var gr = el("div", "grow");
+      gr.appendChild(el("b", null, "구글 연결이 풀렸습니다 — 기록은 그대로 있습니다."));
+      gr.appendChild(el("div", null,
+        "「" + (folder.name || "지정한 폴더") + "」 에 다시 이어 붙이려면 한 번만 눌러 주세요. 쓰던 글은 사라지지 않았습니다."));
+      b.appendChild(gr);
+      var cr = el("button", "btn sm primary", "다시 연결");
+      cr.addEventListener("click", function () { reconnect(); });
+      b.appendChild(cr);
+      return;
+    }
     if (connected && folder.id) {
       b.className = "banner ok";
       var g = el("div", "grow");
@@ -5385,8 +5874,10 @@
       f4.appendChild(el("label", null, "이 브라우저에서 로그아웃"));
       var lo = el("button", "btn sm danger", "연결 해제");
       lo.addEventListener("click", function () {
-        accessToken = null; connected = false; userEmail = "";
+        clearToken();               // 보관해 둔 열쇠까지 확실히 지운다
+        connected = false; userEmail = ""; needReconnect = false;
         localStorage.removeItem(LS.connected);
+        localStorage.removeItem(LS.email);
         updateChrome(); toast("연결을 해제했습니다. 기록은 그대로 남아 있습니다.");
         closeModal();
       });
@@ -5574,10 +6065,15 @@
   })();
 
   if (clientId && folder.id && localStorage.getItem(LS.connected) === "1") {
+    /* 지난번 토큰이 아직 살아 있으면 그대로 이어 쓴다.
+       구글에 다시 물어보지 않으니 새로고침해도 «로그인 화면» 이 안 뜬다. */
+    var kept = loadToken();
+    if (kept) { accessToken = kept; userEmail = localStorage.getItem(LS.email) || ""; }
+
     var wait = setInterval(function () {
-      if (!gisReady()) return;
+      if (!kept && !gisReady()) return;
       clearInterval(wait);
-      requestToken(false).then(ensureAccount)
+      (kept ? Promise.resolve(kept) : requestToken(false)).then(ensureAccount)
         .then(function () { return verifyFolder(folder.id); })
         .then(function (f) {
           folder = { id: f.id, name: f.name, link: f.link };
@@ -5594,9 +6090,18 @@
           return syncPending();
         })
         .then(function () { lastSyncAt = Date.now(); setSyncPill(syncedAgo()); })
-        .catch(function () { /* 조용히 실패 — 사용자가 버튼으로 연결 */ });
+        .catch(function () {
+          /* 예전에는 여기서 아무 말 없이 끝났다. 그래서 «그냥 로그아웃» 처럼 보였다.
+             이제는 «한 번 눌러 다시 연결» 띠를 띄운다. */
+          needReconnect = true;
+          clearToken();
+          updateChrome();
+        });
     }, 300);
-    setTimeout(function () { clearInterval(wait); }, 8000);
+    setTimeout(function () {
+      clearInterval(wait);
+      if (!connected) { needReconnect = true; updateChrome(); }
+    }, 8000);
   }
 })();
 </script>
