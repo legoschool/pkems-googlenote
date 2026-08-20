@@ -435,46 +435,81 @@ await evaluate(`(() => {
 })()`);
 await send("Page.navigate", { url: URL_ });
 await wait(2500);
-const mapOpen = await evaluate(`(() => {
+// 태그가 곧 폴더인 상태로 맞춰 둔다 — 트리가 태그별로 갈라지는지 보려고
+await evaluate(`(() => {
+  const s = JSON.parse(localStorage.getItem('pkems.settings.v1') || '{}');
+  s.folderMode = 'tag';
+  localStorage.setItem('pkems.settings.v1', JSON.stringify(s));
+  return true;
+})()`);
+await send("Page.navigate", { url: URL_ });
+await wait(2500);
+
+const treeOpen = await evaluate(`(() => {
   const b = document.getElementById('btnMap');
   if (!b) return 'NO_BUTTON';
   b.click();
-  return document.querySelector('.mapbox') ? 'OPEN' : 'NO_BOX';
+  return document.querySelector('.treebox') ? 'OPEN' : 'NO_BOX';
 })()`);
-check("«🗂 폴더 지도» 가 열린다", mapOpen === "OPEN", String(mapOpen));
+check("«🗂 폴더 구조» 가 열린다", treeOpen === "OPEN", String(treeOpen));
 
-if (mapOpen === "OPEN") {
-  await wait(500);
-  const mp = JSON.parse(await evaluate(`(() => {
-    const cells = Array.from(document.querySelectorAll('.mapcell'));
-    const box = document.querySelector('.mapbox').getBoundingClientRect();
-    const info = cells.map(c => ({
-      name: (c.querySelector('.mapname')||{}).textContent || '',
-      title: c.title,
-      w: parseFloat(c.style.width), h: parseFloat(c.style.height)
-    }));
-    const area = info.reduce((s, c) => s + c.w * c.h, 0);
-    const overflow = info.some(c => c.w < 0 || c.h < 0);
-    return JSON.stringify({ n: cells.length, info, fill: area / (box.width * box.height), overflow });
+if (treeOpen === "OPEN") {
+  await wait(400);
+  const tr = JSON.parse(await evaluate(`(() => {
+    const rows = Array.from(document.querySelectorAll('.trow'));
+    return JSON.stringify({
+      rows: rows.length,
+      folders: rows.filter(r => r.classList.contains('tfolder')).map(r => r.querySelector('.tname').textContent),
+      indents: rows.map(r => parseFloat(r.style.paddingLeft)),
+      firstIsRoot: rows[0] && rows[0].classList.contains('tfolder'),
+      hasMd: rows.some(r => /\\.md$/.test(r.querySelector('.tname').textContent))
+    });
   })()`));
-  check("태그마다 덩어리가 하나씩 생긴다", mp.n === 5, `덩어리 ${mp.n}개`);
-  check("덩어리가 판을 빈틈없이 채운다", mp.fill > 0.9 && !mp.overflow, `채움 ${Math.round(mp.fill*100)}%`);
-  const biggest = mp.info.slice().sort((a, b) => b.w * b.h - a.w * a.h)[0];
-  check("가장 많은 태그가 가장 크다", biggest.name === "수업설계", `${biggest.name} (${biggest.title})`);
+  check("뿌리 폴더가 맨 위에 온다", tr.firstIsRoot, tr.folders[0] || "");
+  check("태그마다 폴더가 갈라진다", tr.folders.some(f => f.startsWith("수업설계")) && tr.folders.some(f => f.startsWith("평가")),
+    tr.folders.slice(0, 6).join(" "));
+  check("아래로 갈수록 안으로 들어간다", Math.max(...tr.indents) > Math.min(...tr.indents), `들여쓰기 ${Math.min(...tr.indents)}~${Math.max(...tr.indents)}px`);
+  check(".md 파일이 폴더 안에 보인다", tr.hasMd);
 
-  const filtered = await evaluate(`(() => {
-    const c = Array.from(document.querySelectorAll('.mapcell'))
-      .find(c => (c.querySelector('.mapname')||{}).textContent === '평가');
-    if (!c) return 'NO_CELL';
-    c.click();
+  // 접었다 폈다
+  const toggled = JSON.parse(await evaluate(`(() => {
+    const before = document.querySelectorAll('.trow').length;
+    const f = Array.from(document.querySelectorAll('.trow.tfolder'))
+      .find(r => r.querySelector('.tname').textContent.startsWith('수업설계'));
+    if (!f) return JSON.stringify({ err: 'NO_FOLDER' });
+    f.click();
+    const folded = document.querySelectorAll('.trow').length;
+    const f2 = Array.from(document.querySelectorAll('.trow.tfolder'))
+      .find(r => r.querySelector('.tname').textContent.startsWith('수업설계'));
+    f2.click();
+    const back = document.querySelectorAll('.trow').length;
+    return JSON.stringify({ before, folded, back });
+  })()`));
+  check("폴더를 접으면 줄이 줄어든다", toggled.folded < toggled.before, `${toggled.before} → ${toggled.folded}줄`);
+  check("다시 펴면 그대로 돌아온다", toggled.back === toggled.before, `${toggled.folded} → ${toggled.back}줄`);
+
+  const allBtns = JSON.parse(await evaluate(`(() => {
+    Array.from(document.querySelectorAll('.mfoot button')).find(b => b.textContent === '모두 접기').click();
+    const collapsed = document.querySelectorAll('.trow').length;
+    Array.from(document.querySelectorAll('.mfoot button')).find(b => b.textContent === '모두 펴기').click();
+    const expanded = document.querySelectorAll('.trow').length;
+    return JSON.stringify({ collapsed, expanded });
+  })()`));
+  check("«모두 접기» 는 뿌리만 남긴다", allBtns.collapsed < 15, `${allBtns.collapsed}줄`);
+  check("«모두 펴기» 는 전부 펼친다", allBtns.expanded > allBtns.collapsed * 3, `${allBtns.expanded}줄`);
+
+  // .md 를 누르면 그 기록이 열린다
+  const opened = await evaluate(`(() => {
+    const r = Array.from(document.querySelectorAll('.trow'))
+      .find(r => /\\.md$/.test(r.querySelector('.tname').textContent));
+    if (!r) return 'NO_MD';
+    r.click();
     return 'CLICKED';
   })()`);
   await wait(700);
-  const after2 = JSON.parse(await evaluate(`JSON.stringify({
-    cards: document.querySelectorAll('.card.entry, #list .card').length,
-    body: document.body.textContent.includes('평가')
-  })`));
-  check("덩어리를 누르면 그 태그만 걸러진다", filtered === "CLICKED" && after2.body, String(filtered));
+  const viewer = await evaluate(`!!document.querySelector('.viewer')`);
+  check(".md 를 누르면 그 기록이 열린다", opened === "CLICKED" && viewer === true, String(opened));
+  await evaluate(`(() => { const v = document.querySelector('.viewer'); if (v) v.remove(); document.body.style.overflow=''; return true; })()`);
 }
 
 /* ---------- 9. 끝난 뒤에도 오류가 없어야 한다 ---------- */
