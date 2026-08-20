@@ -21,7 +21,50 @@ var OFFLINE_HTML =
   "연결한 뒤 다시 열어 주세요.</p>" +
   "</div></body></html>";
 
+/* ---- 다른 앱에서 «공유» 로 보낸 것 받기 ----
+ * 안드로이드 공유 시트에서 이 앱을 고르면 여기로 POST 가 들어온다.
+ * 서비스 워커 안에서는 화면을 그릴 수 없으니, 받은 것을 캐시에 잠깐 넣어 두고
+ * 앱 주소로 돌려보낸다. 화면 쪽에서 그것을 꺼내 블록으로 만든다.
+ * 왜 캐시냐 — 파일(사진)을 통째로 담아 옮길 수 있는 가장 단순한 그릇이다.
+ */
+var SHARE_CACHE = "pkems-share-inbox";
+
+function takeShare(request) {
+  return request.formData().then(function (form) {
+    var files = form.getAll("files").filter(function (f) { return f && f.size; });
+    var meta = {
+      title: form.get("title") || "",
+      text: form.get("text") || "",
+      url: form.get("url") || "",
+      at: Date.now(),
+      files: files.map(function (f, i) {
+        return { key: "file" + i, name: f.name || ("공유파일" + (i + 1)), type: f.type || "application/octet-stream", size: f.size };
+      })
+    };
+    return caches.open(SHARE_CACHE).then(function (cache) {
+      var jobs = [cache.put("/__share__/meta", new Response(JSON.stringify(meta), {
+        headers: { "Content-Type": "application/json" }
+      }))];
+      files.forEach(function (f, i) {
+        jobs.push(cache.put("/__share__/file" + i, new Response(f, {
+          headers: { "Content-Type": f.type || "application/octet-stream" }
+        })));
+      });
+      return Promise.all(jobs);
+    });
+  }).then(function () {
+    return Response.redirect(new URL("./?share=1", self.registration.scope).href, 303);
+  }).catch(function () {
+    return Response.redirect(new URL("./", self.registration.scope).href, 303);
+  });
+}
+
 self.addEventListener("fetch", function (e) {
+  var url = new URL(e.request.url);
+  if (e.request.method === "POST" && /\/share$/.test(url.pathname)) {
+    e.respondWith(takeShare(e.request));
+    return;
+  }
   if (e.request.mode !== "navigate") return;      // 나머지는 그대로 통과
   e.respondWith(
     fetch(e.request).catch(function () {

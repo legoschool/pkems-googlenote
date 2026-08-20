@@ -4806,6 +4806,115 @@
   var toast2 = function (msg) { setTimeout(function () { toast(msg); }, 3000); };
 
   /* =========================================================
+     11-9. 밖에서 들어온 것 받기 — 웹 캡처 · 공유
+     들어오는 길이 두 갈래다.
+       ① 📱 안드로이드 «공유» 시트 → 서비스 워커가 받아 캐시에 두고 여기서 꺼낸다
+       ② 💻 즐겨찾기 한 줄(북마클릿) → 주소 뒤 #capture= 에 담겨 온다
+     둘 다 «쓰던 글에 이어 붙인다». 덮어쓰지 않는다.
+     ========================================================= */
+  var SHARE_CACHE = "pkems-share-inbox";
+
+  function urlHost(u) {
+    try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
+  }
+
+  // 받은 것(제목·주소·본문)을 블록으로 바꿔 이어 붙인다
+  function absorbShared(s) {
+    var title = String(s.title || "").trim();
+    var url = String(s.url || "").trim();
+    var text = String(s.text || "").trim();
+
+    // 안드로이드 앱 상당수가 주소를 text 에 섞어 보낸다. 거기서 뽑아낸다.
+    if (!url) {
+      var m = /https?:\/\/[^\s]+/.exec(text);
+      if (m) { url = m[0]; text = text.replace(m[0], "").trim(); }
+    }
+    if (text && url && text === url) text = "";
+
+    var made = [];
+    if (url) made.push(newBlock("link", { url: url, label: title || urlHost(url) || url }));
+    if (text) made.push(newBlock("quote", { text: text }));
+    if (!url && !text && title) made.push(newBlock("text", { text: title }));
+
+    if (made.length) {
+      blocks = blocks.concat(made);
+      renderBlocks();
+    }
+    // 제목 칸이 비어 있을 때만 채운다. 쓰던 제목을 밀어내지 않는다.
+    var tf = $("title");
+    if (tf && !tf.value.trim() && title) { tf.value = title; touchDraft(); }
+    return made.length;
+  }
+
+  // 서비스 워커가 캐시에 넣어 둔 공유 꾸러미를 꺼낸다
+  function pullSharedFromCache() {
+    if (!self.caches) return Promise.resolve(0);
+    var cache = null;
+    return caches.open(SHARE_CACHE)
+      .then(function (c) { cache = c; return c.match("/__share__/meta"); })
+      .then(function (res) {
+        if (!res) return 0;
+        return res.json().then(function (meta) {
+          var n = absorbShared(meta);
+          var list = meta.files || [];
+          return list.reduce(function (chain, f) {
+            return chain.then(function () {
+              return cache.match("/__share__/" + f.key).then(function (r) {
+                if (!r) return;
+                return r.blob().then(function (blob) {
+                  return acceptFiles([new File([blob], f.name, { type: f.type || blob.type })])
+                    .then(function () { n++; });
+                });
+              });
+            });
+          }, Promise.resolve()).then(function () { return n; });
+        });
+      })
+      .then(function (n) {
+        return caches.delete(SHARE_CACHE).catch(function () {}).then(function () { return n; });
+      })
+      .catch(function () { return 0; });
+  }
+
+  // 즐겨찾기 한 줄이 주소 뒤에 붙여 보낸 것
+  function pullSharedFromHash() {
+    var m = /[#&]capture=([^&]+)/.exec(location.hash || "");
+    if (!m) return 0;
+    var got = 0;
+    try { got = absorbShared(JSON.parse(decodeURIComponent(m[1]))); } catch (e) { got = 0; }
+    history.replaceState(null, "", location.pathname + location.search);
+    return got;
+  }
+
+  function intakeShared() {
+    var fromHash = pullSharedFromHash();
+    if (fromHash) {
+      toast("웹에서 가져온 " + fromHash + "개를 넣었습니다. 이어서 쓰고 «기록 저장» 을 누르세요.");
+      touchDraft();
+      return;
+    }
+    if (!/[?&]share=1/.test(location.search)) return;
+    history.replaceState(null, "", location.pathname);
+    pullSharedFromCache().then(function (n) {
+      if (!n) { toast("공유된 내용을 찾지 못했습니다."); return; }
+      toast("공유한 " + n + "개를 넣었습니다. 이어서 쓰고 «기록 저장» 을 누르세요.");
+      touchDraft();
+      var box = $("blocks");
+      if (box && box.lastElementChild) box.lastElementChild.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  // 설정 화면에 붙일 «즐겨찾기 한 줄». 지금 이 앱 주소가 그대로 박힌다.
+  function bookmarkletCode() {
+    var appUrl = location.origin + location.pathname;
+    return "javascript:(function(){" +
+      "var s=(window.getSelection?String(getSelection()):'').slice(0,4000);" +
+      "var d={title:document.title,url:location.href,text:s};" +
+      "window.open('" + appUrl + "#capture='+encodeURIComponent(JSON.stringify(d)),'_blank');" +
+      "})()";
+  }
+
+  /* =========================================================
      12-0. 도움말 — 연결·백링크·관계망이 뭔지 설명
      ========================================================= */
   function openHelp(tab) {
@@ -5539,7 +5648,7 @@
     var tabs = el("div", "tabs");
     var body = el("div", "mbody");
     var TABS = [["storage", "저장 위치"], ["types", "기록 유형"], ["naming", "파일 이름"],
-                ["advanced", "고급"]];
+                ["capture", "웹 캡처"], ["advanced", "고급"]];
     TABS.forEach(function (t) {
       var b = el("button", "tab" + (active === t[0] ? " on" : ""), t[1]);
       b.addEventListener("click", function () { active = t[0]; paint(); });
@@ -5581,7 +5690,68 @@
       if (active === "storage") paintStorage();
       else if (active === "types") paintTypes();
       else if (active === "naming") paintNaming();
+      else if (active === "capture") paintCapture();
       else paintAdvanced();
+    }
+
+    /* 웹에서 본 것을 바로 이 기록장으로 보내는 두 갈래 */
+    function paintCapture() {
+      var mobile = isTouchDevice();
+      var installed = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+      var f1 = el("div", "field");
+      f1.appendChild(el("label", null, "📱 폰 · 태블릿 — 공유 시트에서 바로 보내기"));
+      f1.appendChild(el("div", "desc",
+        "인터넷·유튜브·사진첩 어디서든 «공유» 를 누르고 목록에서 «기록장» 을 고르면, " +
+        "제목·주소·사진이 이 화면에 그대로 들어옵니다."));
+      var stateLine = el("div", "desc");
+      stateLine.innerHTML = installed
+        ? "<b>지금 앱으로 열려 있습니다.</b> 공유 목록에 «기록장» 이 이미 있을 겁니다."
+        : "먼저 <b>앱으로 설치</b>해야 공유 목록에 나타납니다. " +
+          (mobile ? "브라우저 메뉴에서 «홈 화면에 추가» 를 누르세요."
+                  : "폰에서 이 주소를 열고 «홈 화면에 추가» 를 누르면 됩니다.");
+      f1.appendChild(stateLine);
+      f1.appendChild(el("div", "crophint",
+        "⚠️ 아이폰은 이 방식을 지원하지 않습니다. 아이폰에서는 주소를 복사해 붙여넣거나, 사진첩에서 골라 넣으세요."));
+      body.appendChild(f1);
+
+      var f2 = el("div", "field");
+      f2.appendChild(el("label", null, "💻 컴퓨터 — 즐겨찾기 한 줄"));
+      f2.appendChild(el("div", "desc",
+        "아래 파란 딱지를 브라우저 <b>즐겨찾기 막대로 끌어다 놓으세요.</b> " +
+        "그다음부터는 아무 웹페이지에서나 그것을 누르면, 그 페이지의 제목·주소와 " +
+        "<b>드래그해 둔 글</b>이 새 창의 기록장으로 넘어옵니다."));
+      var drag = el("a", "btn primary", "📥 기록장에 담기");
+      drag.href = bookmarkletCode();
+      drag.draggable = true;
+      drag.style.textDecoration = "none";
+      drag.style.display = "inline-block";
+      drag.addEventListener("click", function (e) {
+        e.preventDefault();
+        toast("이 딱지는 «누르는» 것이 아니라 즐겨찾기 막대로 «끌어다 놓는» 것입니다.");
+      });
+      var row = el("div", "row"); row.appendChild(drag);
+      f2.appendChild(row);
+
+      var cp = el("button", "btn sm", "📋 주소 대신 복사하기");
+      cp.style.marginTop = "8px";
+      cp.addEventListener("click", function () {
+        copyText(bookmarkletCode())
+          .then(function () { toast("복사했습니다. 즐겨찾기를 새로 만들고 «URL» 칸에 붙여넣으세요."); })
+          .catch(function () { toast("복사하지 못했습니다."); });
+      });
+      f2.appendChild(cp);
+      f2.appendChild(el("div", "crophint",
+        "끌어다 놓기가 안 되면 이 단추로 복사한 뒤, 즐겨찾기를 하나 새로 만들어 주소 칸에 붙여넣으면 됩니다."));
+      body.appendChild(f2);
+
+      var f3 = el("div", "field");
+      f3.appendChild(el("label", null, "무엇이 들어오나"));
+      f3.appendChild(el("div", "desc",
+        "🔗 페이지 주소는 «링크» 블록으로, 드래그해 둔 글은 «인용» 블록으로, " +
+        "사진·파일은 그대로 첨부로 들어옵니다. 제목 칸이 비어 있으면 페이지 제목이 채워집니다. " +
+        "쓰던 글이 있으면 지우지 않고 그 뒤에 이어 붙습니다."));
+      body.appendChild(f3);
     }
 
     function paintStorage() {
@@ -6027,6 +6197,7 @@
   updateChrome();
   rehydratePending();   // 지난번에 못 올린 사진·파일 되살리기
   restoreDraft();   // 쓰다 만 내용 되살리기
+  intakeShared();   // 밖에서 «공유»·«웹 캡처» 로 보낸 것 받기 (쓰던 글 뒤에 이어 붙는다)
 
   /* ---------- 앱으로 설치 (PWA) ----------
      서비스 워커는 index.html 을 캐시하지 않는다. 고치면 바로 반영돼야 하기 때문. */
