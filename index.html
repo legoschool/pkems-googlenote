@@ -1420,7 +1420,10 @@
     var jobs = [];
     if (n.mdId) jobs.push(moveToParent(n.mdId, t.md));
     (n.blocks || []).forEach(function (b) {
-      if (b.fileId) jobs.push(moveToParent(b.fileId, t.file));
+      /* ⚠️ 폴더에서 끌어온 원본은 제자리에 둔다.
+         십삼 년 동안 있던 자리에서 끌어내면, 그 폴더를 쓰던 다른 길이 다 끊긴다.
+         옮기는 것은 「📛 파일 이름 정리」처럼 사람이 시켰을 때만 할 일이다. */
+      if (b.fileId && b.fileId !== n.srcId) jobs.push(moveToParent(b.fileId, t.file));
     });
     return Promise.all(jobs);
   }
@@ -2216,6 +2219,8 @@
       createdAt: n.createdAt, updatedAt: n.updatedAt,
       mdId: n.mdId || null, mdName: n.mdName || null,
       docId: n.docId || null, htmlId: n.htmlId || null,
+      srcId: n.srcId || null,          // 폴더에서 끌어온 것이라면, 그 원본 파일 ID
+      srcFolderId: n.srcFolderId || null, srcFolderName: n.srcFolderName || null,
       folderId: n.folderId || null, folderName: n.folderName || null,
       shareUrl: n.shareUrl || null,
       shareFolderUrl: n.shareFolderUrl || null
@@ -4291,7 +4296,8 @@
       var keep = {}, keepIds = {};
       blocks.forEach(function (b) { if (b.fileId) keep[b.fileId] = 1; keepIds[b.id] = 1; });
       (n.blocks || []).forEach(function (b) {
-        if (b.fileId && !keep[b.fileId]) trashFile(b.fileId);
+        // ⚠️ 폴더에서 끌어온 원본은 «빼도» 버리지 않는다. 내가 만든 파일이 아니다.
+        if (b.fileId && !keep[b.fileId] && b.fileId !== n.srcId) trashFile(b.fileId);
         if (!b.fileId && !keepIds[b.id]) idbDel(b.id);   // 빠진 대기 첨부 정리
       });
     } else {
@@ -4336,12 +4342,18 @@
   function removeEntry(id) {
     var n = entries.filter(function (x) { return x.id === id; })[0];
     if (!n) return;
+    /* 폴더에서 끌어온 자료(srcId)는 «원래부터 있던 남의 파일» 이다.
+       목록에서 빼는 것과 파일을 버리는 것은 전혀 다른 일이라, 여기서는 목록에서만 뺀다.
+       ⚠️ 이걸 안 가르면 십삼 년치를 훑어 온 사람이 한 편 지웠을 때 원본이 사라진다. */
+    var imported = !!n.srcId;
     confirmModal("기록을 삭제할까요?",
-      "「" + (n.title || "") + "」" + (connected
-        ? "\n\n드라이브의 .md 파일과 첨부 자료도 함께 휴지통으로 이동합니다."
-        : "\n\n이 기기에서 삭제됩니다."),
+      "「" + (n.title || "") + "」" + (!connected
+        ? "\n\n이 기기에서 삭제됩니다."
+        : imported
+          ? "\n\n목록에서만 뺍니다. 폴더에서 끌어온 것이라 드라이브의 원본 파일은 그대로 남습니다."
+          : "\n\n드라이브의 .md 파일과 첨부 자료도 함께 휴지통으로 이동합니다."),
       function () {
-        if (connected) {
+        if (connected && !imported) {
           if (n.folderId) {
             trashFile(n.folderId);        // 기록 폴더째로 (안의 파일도 함께)
           } else {
@@ -5080,6 +5092,9 @@
     if (n.htmlId) linkBtn("🌐 HTML 파일", driveLink(n.htmlId), "드라이브에 저장된 HTML 파일");
     if (n.mdId) linkBtn("📝 .md", driveLink(n.mdId), "마크다운 원본");
     if (n.folderId) linkBtn("📁 폴더", "https://drive.google.com/drive/folders/" + n.folderId, "이 기록의 드라이브 폴더");
+    // 끌어온 것은 «원본이 있던 곳» 으로 데려다 준다. 이 기록이 가진 폴더가 아니므로 말을 다르게 쓴다.
+    else if (n.srcFolderId) linkBtn("📁 원본 폴더", "https://drive.google.com/drive/folders/" + n.srcFolderId,
+      "이 자료가 원래 있던 폴더" + (n.srcFolderName ? " — " + n.srcFolderName : ""));
 
     var shared = function () { return n.shareUrl || n.shareFolderUrl; };
     var share = el("button", "btn sm", shared() ? "🔗 공유 중" : "🔗 링크로 공유");
@@ -5692,20 +5707,31 @@
   /* =========================================================
      11-8. 폴더에서 가져오기 — 색인에 없는 .md 를 찾아 목록에 넣는다
      ========================================================= */
+  var LIST_PAGE_MAX = 5000;   // 한 폴더에서 받아 올 파일 수 상한
+
   function listChildren(parentId) {
     var q = "'" + parentId + "' in parents and trashed=false";
-    return driveJson("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
-      "&fields=files(id,name,mimeType,size,createdTime,modifiedTime)&pageSize=1000" +
-      "&supportsAllDrives=true&includeItemsFromAllDrives=true")
-      .then(function (j) { return j.files || []; })
-      .catch(function () { return []; });
+    var base = "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
+      "&fields=nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink)" +
+      "&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true";
+    var out = [];
+    /* 한 폴더에 1000개가 넘게 들어 있으면 구글이 쪽으로 나눠 준다.
+       쪽을 안 넘기면 1001번째부터는 «없는 것» 이 된다. 십 년치 폴더에서는 실제로 넘는다. */
+    function page(token) {
+      return driveJson(base + (token ? "&pageToken=" + encodeURIComponent(token) : ""))
+        .then(function (j) {
+          out = out.concat(j.files || []);
+          if (j.nextPageToken && out.length < LIST_PAGE_MAX) return page(j.nextPageToken);
+        });
+    }
+    return page("").then(function () { return out; }).catch(function () { return out; });
   }
   /* 연결 폴더 아래를 깊이까지 훑는다.
      학년·학기·과목처럼 여러 겹으로 정리해 두어도 찾아낸다.
      드라이브 요청이 폭주하지 않도록 «깊이»와 «폴더 수»에 상한을 둔다. */
-  var SCAN_DEPTH = 5;         // 연결 폴더 아래로 5단계까지
-  var SCAN_FOLDER_MAX = 400;  // 훑을 폴더 수 상한
-  var SCAN_PARALLEL = 4;      // 동시에 물어볼 폴더 수
+  var SCAN_DEPTH = 10;         // 연결 폴더 아래로 10단계까지
+  var SCAN_FOLDER_MAX = 3000;  // 훑을 폴더 수 상한
+  var SCAN_PARALLEL = 4;       // 동시에 물어볼 폴더 수
 
   function scanFolder(onStep) {
     var files = [], seen = {}, visited = 0, truncated = false;
@@ -5724,10 +5750,14 @@
         return listChildren(dir.id).then(function (kids) {
           kids.forEach(function (k) {
             if (k.mimeType === "application/vnd.google-apps.folder") {
-              if (!seen[k.id]) { seen[k.id] = 1; nextLevel.push({ id: k.id, name: k.name, depth: dir.depth + 1 }); }
+              if (!seen[k.id]) {
+                seen[k.id] = 1;
+                nextLevel.push({ id: k.id, name: k.name, depth: dir.depth + 1, path: dir.path.concat([k.name]) });
+              }
               return;
             }
             k._parent = dir.id; k._parentName = dir.name;
+            k._path = dir.path;                 // 연결 폴더부터 여기까지 거쳐 온 폴더 이름들
             files.push(k);
           });
         }).then(worker);
@@ -5743,7 +5773,7 @@
       });
     }
 
-    return walk([{ id: folder.id, name: folder.name, depth: 0 }]).then(function () {
+    return walk([{ id: folder.id, name: folder.name, depth: 0, path: [] }]).then(function () {
       return { files: files, folders: visited, truncated: truncated };
     });
   }
@@ -5835,6 +5865,103 @@
     return out;
   }
 
+  /* ---------------------------------------------------------
+     자료 끌어오기 — .md 가 아닌 것도 색인에 넣는다
+
+     십 년 넘게 쌓인 것은 대부분 «글» 이 아니라 «자료» 다.
+     한글·발표·PDF·사진·영상이 폴더 깊은 곳에 그냥 놓여 있다.
+     그걸 한 편씩 «기록» 으로 세워 두면, 목록·검색·관계망에 다 들어온다.
+     원본은 건드리지 않는다. 색인이 그 파일을 «가리키기만» 한다.
+     --------------------------------------------------------- */
+  var IMPORT_MAX = 3000;      // 한 번에 색인에 넣을 자료 수 상한
+  var IMPORT_TAG_DEPTH = 3;   // 태그로 붙일 상위 폴더 이름 개수
+
+  /* 운영체제·편집기가 몰래 만드는 부스러기. 이런 건 기록이 아니다. */
+  var JUNK_RE = /^(\.|~\$)|^(desktop\.ini|thumbs\.db|icon\r?)$|\.(tmp|temp|part|crdownload|lnk|url|ini|db)$/i;
+
+  function isGoogleNative(f) { return /^application\/vnd\.google-apps\./.test(f.mimeType || ""); }
+
+  /* 색인에 넣을 «자료» 인가.
+     ⚠️ 바로가기(shortcut)는 반드시 걸러야 한다. 「태그가 곧 폴더」 설정이
+        태그 폴더마다 바로가기를 놓기 때문에, 안 거르면 같은 기록이 태그 수만큼 늘어난다. */
+  function isImportable(f) {
+    if (!f || !f.name) return false;
+    if (/\.md$/i.test(f.name)) return false;                            // 글은 따로 읽는다
+    if (JUNK_RE.test(f.name)) return false;
+    if (f.mimeType === "application/vnd.google-apps.folder") return false;
+    if (f.mimeType === "application/vnd.google-apps.shortcut") return false;
+    return true;
+  }
+
+  /* 사람이 알아볼 만한 갈래 이름 — 「무엇을 몇 개 가져올지」 미리 보여 줄 때 쓴다 */
+  function kindLabel(f) {
+    var m = f.mimeType || "", n = f.name || "";
+    // 구글 문서·시트·슬라이드는 내려받을 실체가 없다. 링크로만 걸리므로 갈래도 따로 세운다.
+    if (isGoogleNative(f)) return "구글 문서";
+    if (/^image\//.test(m)) return "사진";
+    if (/^video\//.test(m)) return "영상";
+    if (/^audio\//.test(m)) return "소리";
+    if (/pdf/i.test(m) || /\.pdf$/i.test(n)) return "PDF";
+    if (/\.hwpx?$/i.test(n)) return "한글";
+    if (/presentation|powerpoint/i.test(m) || /\.(pptx?|odp)$/i.test(n)) return "발표";
+    if (/spreadsheet|excel/i.test(m) || /\.(xlsx?|csv|ods)$/i.test(n)) return "표";
+    if (/word|opendocument\.text/i.test(m) || /\.(docx?|rtf|odt|txt)$/i.test(n)) return "문서";
+    if (/zip|rar|7z|tar|gzip/i.test(m) || /\.(zip|rar|7z|tar|gz)$/i.test(n)) return "묶음";
+    return "그 밖";
+  }
+
+  /* 자료 파일 하나를 «기록» 한 편으로 세운다.
+     구글 문서·스프레드시트 같은 것은 내려받을 실체가 없어 링크로 건다.
+     사진은 image 블록이라야 목록 미리보기·라이트박스에 나온다. */
+  function entryFromFile(f, typeKey) {
+    var block;
+    if (isGoogleNative(f)) {
+      block = newBlock("link", {
+        url: f.webViewLink || ("https://drive.google.com/open?id=" + f.id),
+        label: f.name
+      });
+    } else if (/^image\//.test(f.mimeType || "")) {
+      block = newBlock("image", {
+        caption: "", original: f.name, name: f.name,
+        mime: f.mimeType, size: Number(f.size || 0), fileId: f.id
+      });
+    } else {
+      block = newBlock("file", {
+        caption: "", original: f.name, name: f.name,
+        mime: f.mimeType || "application/octet-stream",
+        size: Number(f.size || 0), fileId: f.id
+      });
+    }
+    // 거쳐 온 폴더 이름을 태그로 삼는다 — 「2019/3학년/과학」 이 그대로 찾는 길이 된다
+    var tags = (f._path || []).slice(-IMPORT_TAG_DEPTH)
+      .map(function (s) { return safeName(s, 40); })
+      .filter(Boolean);
+    var created = Date.parse(f.createdTime) || Date.now();
+    var deep = f._parent !== folder.id;
+    return {
+      id: uid("k_"),
+      type: typeKey,
+      title: stemOf(f.name) || f.name,
+      tags: tags,
+      blocks: [block],
+      relations: [],
+      createdAt: created,
+      updatedAt: Date.parse(f.modifiedTime) || created,
+      /* ⚠️ 어느 파일에서 왔는지 반드시 남긴다. 안 남기면 다음에 또 눌렀을 때 같은 것이 두 번 들어온다.
+         첨부·사진은 블록의 fileId 로 알아볼 수 있지만, 구글 문서는 링크 블록이라 남는 것이 없다.
+         그래서 갈래를 가리지 않고 여기에 적어 둔다 — slim() 에도 함께 있어야 살아남는다. */
+      srcId: f.id,
+      /* ⚠️ 여기에 folderId 를 넣으면 안 된다. 이 앱에서 folderId 는
+         «이 기록이 가진 폴더» 라는 뜻이고, 지우기·공유·옮기기가 전부 그리로 향한다.
+         가져온 자료가 있던 곳은 «남의 폴더» 다 — 십삼 년치가 통째로 들어 있는 곳이다.
+         거기에 folderId 를 걸면 기록 한 편을 지웠을 때 그 폴더가 통째로 휴지통에 간다.
+         그래서 «원본이 있던 곳» 은 이름을 달리해 따로 적고, 길 안내에만 쓴다. */
+      srcFolderId: deep ? f._parent : null,
+      srcFolderName: deep ? f._parentName : null,
+      _imported: true
+    };
+  }
+
   function importFromFolder(status) {
     if (!connected || !folder.id) { toast("먼저 드라이브에 연결해 주세요."); return Promise.resolve(0); }
     var known = {};
@@ -5842,10 +5969,127 @@
       if (n.mdId) known[n.mdId] = 1;
       if (n.docId) known[n.docId] = 1;
       if (n.htmlId) known[n.htmlId] = 1;
+      if (n.srcId) known[n.srcId] = 1;
       (n.blocks || []).forEach(function (b) { if (b.fileId) known[b.fileId] = 1; });
     });
     var byEntryId = {};
     entries.forEach(function (n) { byEntryId[n.id] = 1; });
+
+    var addedMd = 0, addedFile = 0, skipped = 0;
+
+    // 자료를 세울 때 붙일 기록 유형 — 「자료」 가 있으면 그것을, 없으면 맨 앞 것을
+    function materialTypeKey() {
+      var key = settings.types[0] ? settings.types[0].key : "";
+      settings.types.forEach(function (t) {
+        if (t.key === "material" || t.label === "자료") key = t.key;
+      });
+      return key;
+    }
+
+    // ① 글(.md) 한 편을 읽어 색인에 세운다
+    function readMd(f, files) {
+      return fetchText(f.id).then(function (text) {
+        if (!text) { skipped++; return; }
+        var parsed = parseFrontMatter(text);
+        var fm = parsed.fm;
+        if (fm.id && byEntryId[fm.id]) { skipped++; return; }  // 이미 있는 기록
+
+        var title = unquote(fm.title) ||
+          (/^#\s+(.*)$/m.exec(parsed.body) || [])[1] ||
+          stemOf(f.name);
+        var typeKey = settings.types[0] ? settings.types[0].key : "";
+        var wanted = unquote(fm.type);
+        settings.types.forEach(function (t) { if (t.label === wanted) typeKey = t.key; });
+
+        var siblings = files.filter(function (x) { return x._parent === f._parent && x.id !== f.id; });
+        var created = Date.parse(fm.created || f.createdTime) || Date.now();
+        var updated = Date.parse(fm.updated || f.modifiedTime) || created;
+
+        var n = {
+          id: fm.id && !byEntryId[fm.id] ? fm.id : uid("k_"),
+          type: typeKey,
+          title: title,
+          tags: parseListValue(fm.tags),
+          blocks: bodyToBlocks(parsed.body, siblings),
+          relations: [],
+          createdAt: created,
+          updatedAt: updated,
+          mdId: f.id,
+          mdName: f.name,
+          // 위 entryFromFile 과 같은 이유 — 남의 폴더에 folderId 를 걸면 안 된다
+          srcFolderId: (f._parent !== folder.id) ? f._parent : null,
+          srcFolderName: (f._parent !== folder.id) ? f._parentName : null,
+          _imported: true
+        };
+        byEntryId[n.id] = 1;
+        entries.push(n);
+        addedMd++;
+      });
+    }
+
+    /* ② 글이 아닌 자료 — 몇 개를 무슨 갈래로 넣을지 먼저 보여 주고 물어본다.
+       십 년치 폴더에서는 수천 개가 나올 수 있어서, 말없이 넣으면 안 된다. */
+    function askThenAddMaterials(rest) {
+      if (!rest.length) return Promise.resolve();
+
+      var counts = {}, kinds = [];
+      rest.forEach(function (f) {
+        var k = kindLabel(f);
+        if (!counts[k]) { counts[k] = 0; kinds.push(k); }
+        counts[k]++;
+      });
+      kinds.sort(function (a, b) { return counts[b] - counts[a]; });
+
+      var take = rest;
+      var over = rest.length > IMPORT_MAX;
+      if (over) {
+        // 넘칠 때는 «최근에 고친 것» 부터 넣는다. 나머지는 한 번 더 누르면 이어서 들어온다.
+        take = rest.slice().sort(function (a, b) {
+          return (Date.parse(b.modifiedTime) || 0) - (Date.parse(a.modifiedTime) || 0);
+        }).slice(0, IMPORT_MAX);
+      }
+
+      var text = "글이 아닌 자료가 " + rest.length + "개 있습니다.\n\n" +
+        kinds.map(function (k) { return "· " + k + " " + counts[k] + "개"; }).join("\n") +
+        "\n\n하나를 기록 한 편으로 세워 목록에 넣습니다. 거쳐 온 폴더 이름이 태그로 붙습니다.\n" +
+        "원본은 옮기지도 고치지도 않습니다. 색인이 가리키기만 합니다.\n" +
+        "잘못 들어와도 목록에서 지우면 그만입니다 — 드라이브의 파일은 그대로 남습니다." +
+        (over ? "\n\n⚠️ 한 번에 " + IMPORT_MAX + "개까지만 넣습니다. 최근에 고친 것부터 들어가고,\n" +
+                "나머지 " + (rest.length - IMPORT_MAX) + "개는 한 번 더 누르면 이어서 들어옵니다." : "");
+
+      return new Promise(function (resolve) {
+        confirmModal("🗂️ 자료도 함께 가져올까요?", text, function () {
+          if (status) status.textContent = "자료 " + take.length + "개를 세우는 중…";
+          var typeKey = materialTypeKey();
+          take.forEach(function (f) {
+            var n = entryFromFile(f, typeKey);
+            byEntryId[n.id] = 1;
+            entries.push(n);
+            addedFile++;
+          });
+          resolve();
+        }, "가져오기", resolve);
+      });
+    }
+
+    function finish(scan) {
+      var total = addedMd + addedFile;
+      if (!total) {
+        if (status) status.textContent = "폴더 " + scan.folders + "곳을 훑었습니다 — 새로 가져올 것이 없습니다." +
+          (skipped ? " (건너뜀 " + skipped + ")" : "");
+        return 0;
+      }
+      entries.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+      invalidateLinks(); saveLocal(); render();
+      var parts = [];
+      if (addedMd) parts.push("글 " + addedMd + "편");
+      if (addedFile) parts.push("자료 " + addedFile + "개");
+      if (status) status.textContent = parts.join(" · ") + " 를 색인에 넣었습니다. 저장하는 중…";
+      return saveIndex().then(function () {
+        if (status) status.textContent = parts.join(" · ") + " 를 가져왔습니다.";
+        return total;
+      });
+    }
 
     if (status) status.textContent = "폴더를 훑는 중…";
     return scanFolder(function (dirs, found) {
@@ -5853,65 +6097,32 @@
     }).then(function (scan) {
       var files = scan.files;
       if (scan.truncated) {
-        toast("폴더 " + scan.folders + "곳까지만 훑었습니다 (5단계·400곳 한도).");
+        toast("폴더 " + scan.folders + "곳까지만 훑었습니다 (" + SCAN_DEPTH + "단계·" + SCAN_FOLDER_MAX + "곳 한도).");
         toast2("더 깊거나 많은 곳에 있는 파일은, 그 폴더를 직접 연결해서 한 번 더 가져오세요.");
       }
+      /* ⚠️ 「태그가 곧 폴더」 설정은 태그 폴더마다 «.md 바로가기» 를 놓는다.
+         이름이 진짜 글과 똑같아서 안 거르면 매번 다시 읽으려 든다.
+         바로가기를 읽으면 본문이 빈 채로 와서, 끝없이 «글 N편을 읽는 중» 만 뜬다. */
       var mds = files.filter(function (f) {
-        return !known[f.id] && /\.md$/i.test(f.name || "");
+        return !known[f.id] && /\.md$/i.test(f.name || "") &&
+          f.mimeType !== "application/vnd.google-apps.shortcut";
       });
-      if (!mds.length) {
-        if (status) status.textContent = "폴더 " + scan.folders + "곳을 훑었습니다 — 새로 가져올 .md 파일이 없습니다.";
-        return 0;
+      if (status) {
+        status.textContent = "폴더 " + scan.folders + "곳에서 파일 " + files.length + "개를 봤습니다" +
+          (mds.length ? " — 글 " + mds.length + "편을 읽는 중…" : "…");
       }
-      if (status) status.textContent = "폴더 " + scan.folders + "곳에서 " + mds.length + "개를 찾았습니다. 읽는 중…";
 
-      var added = 0, skipped = 0;
       return mds.reduce(function (p, f) {
-        return p.then(function () {
-          return fetchText(f.id).then(function (text) {
-            if (!text) { skipped++; return; }
-            var parsed = parseFrontMatter(text);
-            var fm = parsed.fm;
-            if (fm.id && byEntryId[fm.id]) { skipped++; return; }  // 이미 있는 기록
-
-            var title = unquote(fm.title) ||
-              (/^#\s+(.*)$/m.exec(parsed.body) || [])[1] ||
-              stemOf(f.name);
-            var typeKey = settings.types[0] ? settings.types[0].key : "";
-            var wanted = unquote(fm.type);
-            settings.types.forEach(function (t) { if (t.label === wanted) typeKey = t.key; });
-
-            var siblings = files.filter(function (x) { return x._parent === f._parent && x.id !== f.id; });
-            var created = Date.parse(fm.created || f.createdTime) || Date.now();
-            var updated = Date.parse(fm.updated || f.modifiedTime) || created;
-
-            var n = {
-              id: fm.id && !byEntryId[fm.id] ? fm.id : uid("k_"),
-              type: typeKey,
-              title: title,
-              tags: parseListValue(fm.tags),
-              blocks: bodyToBlocks(parsed.body, siblings),
-              relations: [],
-              createdAt: created,
-              updatedAt: updated,
-              mdId: f.id,
-              mdName: f.name,
-              folderId: (f._parent !== folder.id) ? f._parent : null,
-              folderName: (f._parent !== folder.id) ? f._parentName : null,
-              _imported: true
-            };
-            byEntryId[n.id] = 1;
-            entries.push(n);
-            added++;
-          });
-        });
+        return p.then(function () { return readMd(f, files); });
       }, Promise.resolve()).then(function () {
-        if (!added) { if (status) status.textContent = "새로 가져올 것이 없습니다. (건너뜀 " + skipped + ")"; return 0; }
-        entries.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
-        invalidateLinks(); saveLocal(); render();
-        if (status) status.textContent = added + "개를 가져와 색인에 넣었습니다.";
-        return saveIndex().then(function () { return added; });
-      });
+        /* 글에 딸려 온 사진·첨부는 이미 그 글의 일부다. 여기서 다시 세우면 같은 것이 두 번 들어간다.
+           그래서 «글을 다 읽은 뒤에» 남은 것을 고른다 — 순서가 뒤바뀌면 안 된다. */
+        entries.forEach(function (n) {
+          (n.blocks || []).forEach(function (b) { if (b.fileId) known[b.fileId] = 1; });
+        });
+        var rest = files.filter(function (f) { return !known[f.id] && isImportable(f); });
+        return askThenAddMaterials(rest);
+      }).then(function () { return finish(scan); });
     }).catch(function (e) {
       if (status) status.textContent = "가져오기 실패: " + e.message;
       return 0;
@@ -7148,20 +7359,32 @@
     }, 30);
   }
 
-  function confirmModal(title, text, onOk) {
+  /* okLabel 을 안 주면 「삭제」다 (원래 쓰던 자리들이 다 지우기라서).
+     onCancel 은 취소·바깥 누름·닫기 어느 쪽이든 «딱 한 번» 불린다 —
+     기다리는 쪽이 약속(Promise)이면 안 불러 주는 순간 영영 멈춘다. */
+  function confirmModal(title, text, onOk, okLabel, onCancel) {
     var bg = el("div", "modal-bg");
     var m = el("div", "card modal"); m.style.maxWidth = "440px";
     var h = el("div", "mhead"); h.appendChild(el("h3", null, title)); m.appendChild(h);
     var body = el("div", "mbody");
     var p = el("p", null, text); p.style.whiteSpace = "pre-wrap"; p.style.margin = "0";
     body.appendChild(p); m.appendChild(body);
+    var done = false;
+    function close(ok) {
+      if (done) return;
+      done = true;
+      bg.remove();
+      if (ok) { if (onOk) onOk(); }
+      else if (onCancel) onCancel();
+    }
     var f = el("div", "mfoot");
     f.appendChild(el("span", "spacer"));
-    var no = el("button", "btn", "취소"); no.addEventListener("click", function () { bg.remove(); });
-    var yes = el("button", "btn primary", "삭제"); yes.addEventListener("click", function () { bg.remove(); onOk(); });
+    var no = el("button", "btn", "취소"); no.addEventListener("click", function () { close(false); });
+    var yes = el("button", "btn primary", okLabel || "삭제");
+    yes.addEventListener("click", function () { close(true); });
     f.appendChild(no); f.appendChild(yes); m.appendChild(f);
     bg.appendChild(m);
-    bg.addEventListener("click", function (e) { if (e.target === bg) bg.remove(); });
+    bg.addEventListener("click", function (e) { if (e.target === bg) close(false); });
     $("modalHost").appendChild(bg);
   }
 
@@ -7510,8 +7733,17 @@
       fImp.appendChild(el("label", null, "폴더에 있는데 목록에 없는 것 가져오기"));
       fImp.appendChild(el("p", "desc",
         "이 앱은 색인 파일(TRACE-index.json)을 보고 목록을 만듭니다. 그래서 옵시디언에서 만든 노트나 " +
-        "드라이브에 직접 넣은 .md 파일은 목록에 안 보입니다. 아래 버튼을 누르면 폴더를 훑어서 " +
-        "그런 파일들을 찾아 색인에 넣어 줍니다. (같은 폴더의 사진·첨부도 함께 연결합니다)"));
+        "드라이브에 직접 넣은 파일은 목록에 안 보입니다. 아래 버튼을 누르면 폴더를 훑어서 " +
+        "그런 것들을 찾아 색인에 넣어 줍니다."));
+      fImp.appendChild(el("p", "desc",
+        "글(.md)은 안을 읽어 그대로 되살리고, 같은 폴더의 사진·첨부를 함께 연결합니다. " +
+        "그리고 글이 아닌 자료 — 한글·발표·표·PDF·사진·영상·구글 문서 — 는 하나를 기록 한 편으로 세워 " +
+        "목록에 넣습니다. 몇 개를 넣을지 먼저 보여 주고 물어봅니다. " +
+        "원본은 옮기지도 고치지도 않습니다. 색인이 가리키기만 합니다. " +
+        "거쳐 온 폴더 이름은 태그로 붙어서, 나중에 그 이름으로 찾을 수 있습니다."));
+      fImp.appendChild(el("p", "desc",
+        "연결한 폴더 아래로 " + SCAN_DEPTH + "단계·폴더 " + SCAN_FOLDER_MAX + "곳까지 훑습니다. " +
+        "십 년치처럼 큰 폴더는 몇 분 걸릴 수 있으니, 끝날 때까지 이 창을 닫지 마세요."));
       var rImp = el("div", "row");
       var imp = el("button", "btn primary", "📥 폴더 훑어서 가져오기");
       imp.disabled = !connected;
