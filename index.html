@@ -554,6 +554,22 @@
   .sharesep { font-size: 12.5px; font-weight: 700; color: var(--ink-soft);
               border-top: 1px solid var(--line); padding-top: 12px; margin-top: 6px; }
 
+  /* 밖에서 넣은 파일 이름 정리 */
+  .renamebox { border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+               max-height: min(52vh, 440px); min-height: 140px; overflow: auto; margin: 10px 0 2px; }
+  .renamerow { display: flex; gap: 10px; align-items: flex-start; padding: 11px 12px;
+               border-bottom: 1px solid var(--line); }
+  .renamerow:last-child { border-bottom: 0; }
+  .renamerow > input[type=checkbox] { width: 17px; height: 17px; margin-top: 3px; flex: none; }
+  .renamemid { flex: 1; min-width: 0; }
+  .renamewas { font-size: 13.5px; color: var(--ink-soft); text-decoration: line-through;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .renamemeta { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
+  .renameline { display: flex; gap: 6px; align-items: baseline; margin: 4px 0 6px; }
+  .renamearrow { color: var(--brand); font-weight: 800; flex: none; }
+  .renamenew { font-weight: 700; font-size: 13.5px; word-break: break-all;
+               font-family: ui-monospace, Consolas, monospace; }
+
   /* 폴더 구조 — 탐색기처럼 위에서 아래로 */
   /* 창이 낮아도 트리가 뭉개지지 않게 최소 높이를 준다. 모자라면 모달 쪽이 스크롤한다. */
   .treebox { border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
@@ -818,6 +834,9 @@
   ];
 
   var FILE_PRESETS = [
+    "{날짜}_{태그}_{제목}_{자료제목}_{번호}",
+    "{날짜}_{태그}_{제목}_{번호}",
+    "{날짜}_{제목}_{자료제목}_{번호}",
     "{폴더명}_{날짜}_{제목}_{번호}",
     "{날짜}_{제목}_{번호}",
     "{폴더명}_{날짜}_{유형}_{제목}_{번호}",
@@ -830,6 +849,8 @@
     "{원본이름}"
   ];
   var MD_PRESETS = [
+    "{날짜}_{태그}_{제목}",
+    "{날짜}_{태그}_{유형}_{제목}",
     "{폴더명}_{날짜}_{유형}_{제목}",
     "{날짜}_{유형}_{제목}",
     "{날짜}_{제목}",
@@ -2733,9 +2754,20 @@
         var origName = el("span", "origname", origText);
         origName.title = origText;
         info.appendChild(origName);
+        /* 여기 적은 것이 «파일 이름에 들어간다». 그래서 「캡션」이 아니라 「제목」이라 부른다.
+           적으면 그 자리에서 아래 파일 이름이 바뀌는 게 보여야 한다. */
         var cap = el("input", "inp");
-        cap.placeholder = "설명·캡션(선택)"; cap.value = b.caption || "";
-        cap.addEventListener("input", function () { b.caption = cap.value; });
+        cap.placeholder = (settings.filePattern.indexOf("{자료제목}") >= 0)
+          ? "이 " + (b.kind === "image" ? "사진" : "파일") + "의 제목 — 파일 이름에 들어갑니다"
+          : "설명·캡션(선택)";
+        cap.value = b.caption || "";
+        cap.addEventListener("input", function () {
+          b.caption = cap.value;
+          if (settings.filePattern.indexOf("{자료제목}") >= 0 && !b.name) {
+            var nm = previewAttachName(b);
+            savedName.textContent = nm; savedName.title = nm;
+          }
+        });
         info.appendChild(cap);
         // 학생 얼굴·이름표를 나중에라도 가릴 수 있게. 올라가기 전이라야 한다.
         if (b.kind === "image" && !b.fileId && b.blob) {
@@ -6177,6 +6209,183 @@
     return TYPE_COLORS[i % TYPE_COLORS.length];
   }
 
+  /* ---------- 📛 밖에서 넣은 파일 이름 정리 ----------
+     드라이브 폴더에 «앱을 안 거치고» 넣은 자료들 — IMG_4821.jpg, 최종본.hwp, 무제.pptx —
+     이름만 봐서는 언제 무엇인지 알 수 없다. 12년치를 끌어오려면 여기가 먼저다.
+
+     하는 일은 «앞에 붙이기» 다. 원래 이름을 지우지 않는다.
+       IMG_4821.jpg  →  2026-08-20_수업설계_IMG_4821.jpg
+     날짜는 드라이브가 기억하는 «만든 날», 가운데는 «그 파일이 들어 있는 폴더 이름».
+     제목을 직접 적으면 원래 이름 대신 그것이 들어간다.
+
+     ⚠️ 파일 ID 는 그대로 두고 이름만 바꾼다. 안에 든 것은 손대지 않는다. */
+
+  var RENAME_DATE_RE = /^\d{4}-\d{2}-\d{2}/;   // 이미 날짜로 시작하면 정리된 것으로 본다
+
+  function looksOrganized(name) {
+    return RENAME_DATE_RE.test(String(name || ""));
+  }
+  function isAppFile(name) {
+    var n = String(name || "");
+    return n === INDEX_NAME || n === SETTINGS_NAME ||
+           OLD_INDEX_NAMES.indexOf(n) >= 0 || OLD_SETTINGS_NAMES.indexOf(n) >= 0;
+  }
+
+  function openRenameStudio() {
+    if (!connected || !folder.id) { toast("드라이브에 연결한 뒤에 쓸 수 있습니다."); return; }
+    closeModal();
+
+    var rows = [];       // { file, checked, titleInput, nameCell }
+    var bg = el("div", "modal-bg");
+    bg.style.zIndex = "178";
+    var m = el("div", "card modal"); m.style.maxWidth = "min(860px, 96vw)";
+
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "📛 밖에서 넣은 파일 이름 정리"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕"); x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody");
+    body.appendChild(el("p", "crophint",
+      "드라이브 폴더에 직접 넣은 자료 중 «이름이 날짜로 시작하지 않는 것»을 찾아 줍니다. " +
+      "앞에 «날짜 + 폴더 이름»을 붙입니다. 원래 이름은 지우지 않습니다."));
+    var status = el("div", "desc");
+    body.appendChild(status);
+    var listBox = el("div", "renamebox");
+    body.appendChild(listBox);
+    m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    var count = el("span", "desc"); count.style.margin = "0";
+    foot.appendChild(count);
+    foot.appendChild(el("span", "spacer"));
+    var allBtn = el("button", "btn sm", "전부 고르기");
+    allBtn.addEventListener("click", function () {
+      var on = rows.some(function (r) { return !r.checked; });
+      rows.forEach(function (r) { r.checked = on; r.box.checked = on; });
+      syncCount();
+    });
+    var go = el("button", "btn primary", "이름 바꾸기");
+    go.addEventListener("click", runRename);
+    foot.appendChild(allBtn); foot.appendChild(go);
+    m.appendChild(foot);
+
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+
+    function proposed(r) {
+      var f = r.file;
+      var day = localDay(f.createdTime) || dateStamp();
+      var where = safeName(f._parentName === folder.name ? "" : (f._parentName || ""), 24);
+      var title = safeName(r.titleInput.value.trim(), 40) || safeName(stemOf(f.name), 40) || "자료";
+      var parts = [day, where, title].filter(Boolean);
+      return parts.join("_").replace(/_{2,}/g, "_") + extOf(f.name);
+    }
+    function syncRow(r) {
+      r.nameCell.textContent = proposed(r);
+    }
+    function syncCount() {
+      var n = rows.filter(function (r) { return r.checked; }).length;
+      count.textContent = "찾은 파일 " + rows.length + "개 · 고른 것 " + n + "개";
+      go.textContent = n ? "이름 바꾸기 (" + n + "개)" : "이름 바꾸기";
+      go.disabled = !n;
+    }
+
+    function draw(files) {
+      listBox.innerHTML = "";
+      rows = [];
+      if (!files.length) {
+        listBox.appendChild(el("p", "desc",
+          "정리할 파일이 없습니다. 폴더 안의 자료가 모두 날짜로 시작하고 있습니다."));
+        syncCount();
+        return;
+      }
+      files.forEach(function (f) {
+        var row = el("div", "renamerow");
+
+        var box = el("input"); box.type = "checkbox"; box.checked = true;
+        row.appendChild(box);
+
+        var mid = el("div", "renamemid");
+        var was = el("div", "renamewas", f.name);
+        was.title = f.name;
+        mid.appendChild(was);
+
+        var meta = el("div", "renamemeta",
+          (localDay(f.createdTime) || "날짜 모름") +
+          (f._parentName && f._parentName !== folder.name ? " · " + f._parentName + "/" : "") +
+          (f.size ? " · " + humanSize(Number(f.size)) : ""));
+        mid.appendChild(meta);
+
+        var line = el("div", "renameline");
+        line.appendChild(el("span", "renamearrow", "→"));
+        var nameCell = el("span", "renamenew", "");
+        line.appendChild(nameCell);
+        mid.appendChild(line);
+
+        var ti = el("input", "inp");
+        ti.placeholder = "이 자료의 제목 (비우면 원래 이름을 씁니다)";
+        mid.appendChild(ti);
+
+        row.appendChild(mid);
+        listBox.appendChild(row);
+
+        var r = { file: f, checked: true, titleInput: ti, nameCell: nameCell, box: box };
+        rows.push(r);
+        ti.addEventListener("input", function () { syncRow(r); });
+        box.addEventListener("change", function () { r.checked = box.checked; syncCount(); });
+        syncRow(r);
+      });
+      syncCount();
+    }
+
+    function runRename() {
+      var todo = rows.filter(function (r) { return r.checked; });
+      if (!todo.length) return;
+      go.disabled = true;
+      var done = 0, failed = 0;
+      todo.reduce(function (chain, r) {
+        return chain.then(function () {
+          var want = proposed(r);
+          status.textContent = "바꾸는 중… " + (done + 1) + "/" + todo.length + "  " + want;
+          return uniqueName(want, r.file._parent)
+            .then(function (finalName) { return renameFile(r.file.id, finalName); })
+            .then(function (ok) {
+              if (ok) { done++; r.box.checked = false; r.checked = false; r.nameCell.textContent = "✔ 바꿨습니다"; }
+              else failed++;
+            })
+            .catch(function () { failed++; });
+        });
+      }, Promise.resolve()).then(function () {
+        status.textContent = done + "개를 바꿨습니다." + (failed ? "  " + failed + "개는 실패했습니다." : "");
+        toast(done + "개의 이름을 바꿨습니다." + (failed ? " (" + failed + "개 실패)" : ""));
+        syncCount();
+        go.disabled = false;
+      });
+    }
+
+    status.textContent = "드라이브 폴더를 훑는 중…";
+    scanFolder(function (n) { status.textContent = "폴더 " + n + "곳을 훑는 중…"; })
+      .then(function (scan) {
+        var targets = (scan.files || []).filter(function (f) {
+          if (f.mimeType === "application/vnd.google-apps.folder") return false;
+          if (isAppFile(f.name)) return false;
+          if (looksOrganized(f.name)) return false;
+          return true;
+        });
+        status.textContent = "폴더 " + scan.folders + "곳을 훑었습니다." +
+          (scan.truncated ? "  (5단계·400곳 한도까지만 봤습니다)" : "");
+        draw(targets);
+      })
+      .catch(function (e) {
+        status.textContent = "폴더를 훑지 못했습니다: " + errText(e);
+      });
+  }
+
   /* ---------- 🗂 폴더 구조 — 드라이브가 지금 어떻게 생겼는지 ----------
      탐색기처럼 위에서 아래로 펼쳐 보여 준다. ▸ 를 눌러 접었다 편다.
      그리는 것은 «지금 설정대로 저장하면 드라이브가 이렇게 된다» 이다.
@@ -6326,6 +6535,10 @@
     var count = el("span", "desc"); count.style.margin = "0";
     foot.appendChild(count);
     foot.appendChild(el("span", "spacer"));
+    var tidy = el("button", "btn sm", "📛 밖에서 넣은 파일 이름 정리");
+    tidy.title = "드라이브에 직접 넣은 자료 이름 앞에 날짜와 폴더 이름을 붙입니다";
+    tidy.addEventListener("click", openRenameStudio);
+    foot.appendChild(tidy);
     var collapse = el("button", "btn sm", "모두 접기");
     collapse.addEventListener("click", function () {
       treeOpen = {}; treeOpen[root.name] = true; draw();
@@ -7225,7 +7438,10 @@
       var pv = el("div", "preview");
       var tk = el("div", "tokens");
       TOKENS.forEach(function (t) {
+        // 글에는 {자료제목} 이 들어갈 자리가 없다 (사진·파일에만 있는 것)
+        if (isMd && t === "{자료제목}") return;
         var b = el("button", "token", t); b.type = "button";
+        if (TOKEN_HELP[t]) b.title = t + " → " + TOKEN_HELP[t];
         b.addEventListener("click", function () {
           ci.classList.remove("hidden"); sel.value = "__custom__";
           ci.value = (ci.value || draft[key]) + t;

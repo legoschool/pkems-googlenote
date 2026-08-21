@@ -362,6 +362,43 @@ if (studio === "OPEN") {
   check("«다 됐습니다» 를 누르면 사진에 반영된다", back.modalGone && back.imgs > 0, `사진 ${back.imgs}장`);
 }
 
+/* ---------- 4-1-3. 파일 이름에 태그·자료제목이 들어가는가 ---------- */
+const naming = JSON.parse(await evaluate(`(() => {
+  document.getElementById('title').value = '물의 상태변화 수업';
+  document.getElementById('tags').value = '수업설계, 3학년';
+  document.getElementById('tags').dispatchEvent(new Event('input', {bubbles:true}));
+  const cap = Array.from(document.querySelectorAll('#blocks input.inp'))
+    .find(i => /제목|캡션/.test(i.placeholder || ''));
+  if (!cap) return JSON.stringify({ err: 'NO_CAPTION_FIELD' });
+  const before = (document.querySelector('#blocks .savedname')||{}).textContent || '';
+  cap.value = '칠판 정리';
+  cap.dispatchEvent(new Event('input', { bubbles: true }));
+  const after = (document.querySelector('#blocks .savedname')||{}).textContent || '';
+  return JSON.stringify({ placeholder: cap.placeholder, before, after });
+})()`));
+check("사진 칸이 «제목»이라고 말해 준다",
+  /파일 이름에 들어갑니다/.test(naming.placeholder || ""), naming.placeholder || naming.err || "");
+check("태그가 파일 이름에 들어간다", /수업설계/.test(naming.after || ""), naming.after || "");
+check("적은 제목이 파일 이름에 들어간다",
+  /칠판 정리/.test(naming.after || "") && naming.after !== naming.before, naming.after || "");
+
+/* ---------- 4-1-4. 밖에서 넣은 파일 이름 정리 ---------- */
+const tidy = await evaluate(`(() => {
+  const b = document.getElementById('btnMap');
+  if (!b) return 'NO_MAP';
+  b.click();
+  const t = Array.from(document.querySelectorAll('.mfoot button'))
+    .find(x => x.textContent.includes('이름 정리'));
+  if (!t) return 'NO_BUTTON';
+  t.click();
+  const toast = document.getElementById('toast');
+  const msg = (toast && toast.classList.contains('show')) ? toast.textContent : '';
+  document.querySelectorAll('.modal-bg').forEach(e => e.remove());
+  return msg || (document.querySelector('.renamebox') ? 'OPENED' : 'NOTHING');
+})()`);
+check("폴더 구조에 «파일 이름 정리»가 있다", tidy !== "NO_MAP" && tidy !== "NO_BUTTON", String(tidy));
+check("연결 전에는 막히고 이유를 말해 준다", /연결/.test(String(tidy)), String(tidy));
+
 /* ---------- 4-2. 손 메모 ---------- */
 const drawOpen = await evaluate(`(() => {
   const b = document.querySelector('[data-add="draw"]');
@@ -487,7 +524,15 @@ const cu = JSON.parse(capUi);
 check("설정에 «웹 캡처» 칸이 있다", cu.found, capTab ? "" : "설정 단추를 못 찾음");
 check("즐겨찾기 한 줄이 만들어진다", cu.hasAppUrl && cu.href.startsWith("javascript:"), cu.href);
 
-/* ---------- 6. 웹 캡처가 실제로 블록이 되는가 ---------- */
+/* ---------- 6. 웹 캡처가 실제로 블록이 되는가 ----------
+   ⚠️ 앞 시험들이 제목 칸을 채워 놓았다. 웹 캡처는 «제목이 비어 있을 때만» 채우므로
+      먼저 쓰다 만 것을 비워야 이 시험이 제 뜻대로 돌아간다. */
+await evaluate(`(() => {
+  localStorage.removeItem('trace.draft.v1');
+  const t = document.getElementById('title'); if (t) { t.value = ''; t.dispatchEvent(new Event('input', {bubbles:true})); }
+  return true;
+})()`);
+await wait(300);
 const payload = encodeURIComponent(JSON.stringify({
   title: "물의 상태변화 정리",
   url: "https://example.org/science/water",
