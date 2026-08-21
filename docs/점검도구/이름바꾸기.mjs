@@ -17,7 +17,7 @@ const EDGE = [
 if (!EDGE) { console.error("엣지도 크롬도 찾지 못했습니다."); process.exit(2); }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const profile = mkdtempSync(join(tmpdir(), "peer-rename-"));
+const profile = mkdtempSync(join(tmpdir(), "trace-rename-"));
 const edge = spawn(EDGE, ["--headless=new", "--disable-gpu", "--no-first-run",
   `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, URL_], { stdio: "ignore" });
 
@@ -92,11 +92,16 @@ await wait(2800);
 
 const got = JSON.parse(await ev(`JSON.stringify({
   cards: document.querySelectorAll('.card.entry, .lrow').length,
-  body: document.body.textContent,
-  newEntries: !!localStorage.getItem('peer.entries.v2'),
-  newFolder: localStorage.getItem('peer.folder') || '',
-  newSettings: localStorage.getItem('peer.settings.v1') || '',
-  newDraft: localStorage.getItem('peer.draft.v1') || '',
+  /* ⚠️ document.body.textContent 를 쓰면 «본문 안의 <script> 글자» 까지 딸려 온다.
+     그러면 코드에 적힌 옛 이름("PEER-index.json") 때문에 시험이 엉뚱하게 통과한다.
+     사람 눈에 보이는 것만 봐야 한다. */
+  body: document.body.innerText,
+  logo: (document.querySelector('.logo')||{}).textContent || '',
+  docTitle: document.title,
+  newEntries: !!localStorage.getItem('trace.entries.v2'),
+  newFolder: localStorage.getItem('trace.folder') || '',
+  newSettings: localStorage.getItem('trace.settings.v1') || '',
+  newDraft: localStorage.getItem('trace.draft.v1') || '',
   oldStillThere: !!localStorage.getItem('pkems.entries.v2'),
   draftTitle: (document.getElementById('title')||{}).value || ''
 })`));
@@ -107,14 +112,16 @@ check("연결해 둔 폴더도 따라온다", got.newFolder.includes("05_교직�
 check("설정도 따라온다 (폴더 방식·보기)", got.newSettings.includes("monthly") && got.newSettings.includes("grid"));
 check("쓰다 만 글도 되살아난다", got.draftTitle === "쓰다 만 옛 글", got.draftTitle);
 check("옛 키를 지우지 않는다 (되돌릴 수 있게)", got.oldStillThere);
-check("화면 이름이 PEER 로 바뀌었다", /PEER/.test(got.body), (document => "")(0) || "");
+check("화면에 보이는 이름이 새 이름이다",
+  /TRACE/.test(got.logo) && /TRACE/.test(got.docTitle) && !/PEER|PKEMS/.test(got.logo),
+  got.logo.slice(0, 50));
 
 /* ---------- 두 번째로 열어도 덮어쓰지 않는가 ---------- */
 await ev(`(() => {
-  const cur = JSON.parse(localStorage.getItem('peer.entries.v2'));
+  const cur = JSON.parse(localStorage.getItem('trace.entries.v2'));
   cur.push({ id:'new1', type:'idea', title:'이름 바꾼 뒤 쓴 기록', tags:[], relations:[], pinned:false,
     blocks:[], createdAt:'2026-08-20T09:00:00.000Z', updatedAt:'2026-08-20T09:00:00.000Z' });
-  localStorage.setItem('peer.entries.v2', JSON.stringify(cur));
+  localStorage.setItem('trace.entries.v2', JSON.stringify(cur));
   return true;
 })()`);
 await send("Page.navigate", { url: URL_ });
@@ -125,6 +132,32 @@ const after = JSON.parse(await ev(`JSON.stringify({
   hasOld: document.body.textContent.includes('옛 버전에서 쓴 기록')
 })`));
 check("새로 쓴 것이 옛 것에 덮이지 않는다", after.hasNew && after.hasOld, `${after.cards}편`);
+
+/* ---------- 사슬의 가운데 고리도 본다: peer.* → trace.* ----------
+   이름이 두 번 바뀌었으므로, «PEER 버전을 쓰던 사람» 도 이어져야 한다.
+   가운데 고리가 끊기면 그 사람들만 기록을 잃는다. */
+await ev(`(() => {
+  localStorage.clear();
+  localStorage.setItem('peer.entries.v2', JSON.stringify([
+    { id:'mid1', type:'knowledge', title:'PEER 시절에 쓴 기록', tags:['평가'],
+      relations:[], pinned:false,
+      blocks:[{id:'m1',kind:'text',text:'가운데 고리가 끊기면 이것이 사라진다.'}],
+      createdAt:'2026-07-01T09:00:00.000Z', updatedAt:'2026-07-01T09:00:00.000Z',
+      mdId:'MDMID', mdName:'2026-07-01_지식_PEER 시절에 쓴 기록.md' }
+  ]));
+  localStorage.setItem('peer.folder', JSON.stringify({id:'MIDFOLDER', name:'06_중간폴더', link:''}));
+  localStorage.setItem('peer.settings.v1', JSON.stringify({ version:1, folderMode:'tag', viewMode:'list' }));
+  return true;
+})()`);
+await send("Page.navigate", { url: URL_ });
+await wait(2600);
+const mid = JSON.parse(await ev(`JSON.stringify({
+  body: document.body.textContent.includes('PEER 시절에 쓴 기록'),
+  folder: localStorage.getItem('trace.folder') || '',
+  settings: localStorage.getItem('trace.settings.v1') || ''
+})`));
+check("PEER 시절 기록도 이어진다", mid.body);
+check("PEER 시절 폴더·설정도 따라온다", mid.folder.includes("06_중간폴더") && mid.settings.includes("tag"), mid.folder.slice(0, 36));
 
 /* «연결됨» 상태로 씨앗을 심었으므로 앱이 구글 창을 열려고 한다.
    화면 없는 브라우저에서는 그 창이 막히는 게 정상이다 — 결함이 아니라 예상된 일이다.

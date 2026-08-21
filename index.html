@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="description" content="글·사진·링크·파일을 블로그처럼 이어 쓰고, 내 구글 드라이브 폴더에 마크다운으로 쌓는 개인 지식·경험 기록장 PEER" />
+<meta name="description" content="글·사진·링크·파일을 블로그처럼 이어 쓰고, 내 구글 드라이브 폴더에 마크다운으로 쌓는 개인 지식·경험 관리 체계 TRACE 의 기록 도구 — 내가 남긴 흔적이, 다음 사람의 길이 된다" />
 <meta name="theme-color" content="#2f5fd6" />
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="기록장" />
-<title>PEER · 개인 지식·경험 기록장</title>
+<title>구글 기록장 · TRACE 개인 지식·경험 관리 체계</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
@@ -649,7 +649,7 @@
 
 <header class="top">
   <div class="top-inner">
-    <div class="logo">🤝 PEER <small>내 지식과 경험이 동료가 된다</small></div>
+    <div class="logo">📝 구글 기록장 <small>TRACE · 내가 남긴 흔적이, 다음 사람의 길이 된다</small></div>
     <div class="spacer"></div>
     <span id="syncPill" class="syncpill"></span>
     <span id="acct" class="acct"></span>
@@ -737,7 +737,7 @@
   <div id="list"></div>
 
   <footer class="site">
-    PEER · Personal Experience, Evidence &amp; Record &nbsp;|&nbsp; <a href="privacy.html">개인정보처리방침</a>
+    구글 기록장 · TRACE — Teaching · Record · Archive · Connection · Experience &nbsp;|&nbsp; <a href="privacy.html">개인정보처리방침</a>
   </footer>
 </div>
 
@@ -766,14 +766,15 @@
   // 사용자가 임의의 폴더 ID/링크를 지정하므로 전체 drive 스코프가 필요합니다.
   var SCOPE = "openid email https://www.googleapis.com/auth/drive";
 
-  /* 이름을 PKEMS 에서 PEER 로 바꿨다.
-     ⚠️ 드라이브에 이미 «PKEMS-index.json» 을 쓰고 있는 사람이 있다.
+  /* 이름이 두 번 바뀌었다: PKEMS → PEER → TRACE.
+     ⚠️ 드라이브에 옛 이름으로 쌓아 둔 사람이 있다.
         새 이름으로 파일을 «새로 만들면» 그 사람의 기록이 통째로 안 보이게 된다.
-        그래서 옛 이름도 함께 찾고, 찾으면 «파일 ID 는 그대로 둔 채 이름만» 바꾼다. */
-  var INDEX_NAME = "PEER-index.json";
-  var SETTINGS_NAME = "PEER-settings.json";
-  var OLD_INDEX_NAME = "PKEMS-index.json";
-  var OLD_SETTINGS_NAME = "PKEMS-settings.json";
+        그래서 옛 이름을 «최근 것부터» 차례로 찾고,
+        찾으면 «파일 ID 는 그대로 둔 채 이름만» 바꾼다. 안에 든 것은 안 움직인다. */
+  var INDEX_NAME = "TRACE-index.json";
+  var SETTINGS_NAME = "TRACE-settings.json";
+  var OLD_INDEX_NAMES = ["PEER-index.json", "PKEMS-index.json"];
+  var OLD_SETTINGS_NAMES = ["PEER-settings.json", "PKEMS-settings.json"];
   var MAX_FILE_MB = 200;
   var RESUMABLE_CHUNK = 8 * 1024 * 1024;   // PC 는 8MB 씩 끊어서 올린다
   var MOBILE_CHUNK = 2 * 1024 * 1024;      // 폰은 2MB — 신호가 나쁠 때 되돌아갈 거리를 줄인다
@@ -789,8 +790,10 @@
       { key: "material",   label: "자료", icon: "🗂️" },
       { key: "reflection", label: "회고", icon: "🪞" }
     ],
-    filePattern: "{날짜}_{제목}_{번호}",
-    mdPattern: "{날짜}_{유형}_{제목}",
+    /* 날짜·태그·제목이 기본으로 함께 간다. 나중에 폴더만 보고도 무엇인지 알 수 있게.
+       사진·파일은 그 자료에 적어 둔 제목({자료제목})까지 붙는다. 안 적으면 알아서 빠진다. */
+    filePattern: "{날짜}_{태그}_{제목}_{자료제목}_{번호}",
+    mdPattern: "{날짜}_{태그}_{제목}",
     // 드라이브 정리 방식: perEntry(기록마다 폴더) | materials(자료만 따로) | monthly(월별) | flat(한 폴더)
     folderMode: "perEntry",
     folderPattern: "{날짜}_{유형}_{제목}",
@@ -834,31 +837,41 @@
     "{날짜}_{시간}_{제목}",
     "{제목}"
   ];
-  var TOKENS = ["{폴더명}", "{하위폴더}", "{날짜}", "{시간}", "{유형}", "{제목}", "{번호}", "{원본이름}", "{확장자}"];
-
-  var LS = {
-    entries: "peer.entries.v2",
-    settings: "peer.settings.v1",
-    tombs: "peer.tombstones.v1",
-    draft: "peer.draft.v1",
-    folder: "peer.folder",
-    cid: "peer.clientId",
-    connected: "peer.connected",
-    token: "peer.token.v1",     // 새로고침해도 로그인이 안 풀리게 (만료시각까지만)
-    email: "peer.email"         // 다시 받을 때 계정 고르는 화면을 건너뛰려고
+  var TOKENS = ["{날짜}", "{태그}", "{제목}", "{자료제목}", "{번호}",
+                "{폴더명}", "{하위폴더}", "{시간}", "{유형}", "{원본이름}", "{확장자}"];
+  // 토큰이 무슨 뜻인지 설정 화면에 그대로 보여 준다
+  var TOKEN_HELP = {
+    "{날짜}": "2026-08-20", "{태그}": "첫 태그", "{제목}": "기록 제목",
+    "{자료제목}": "사진·파일에 적은 제목", "{번호}": "01, 02 …",
+    "{폴더명}": "연결한 폴더 이름", "{하위폴더}": "자료 · 2026-08 …",
+    "{시간}": "1421", "{유형}": "경험 · 지식 …", "{원본이름}": "IMG_4821", "{확장자}": "png"
   };
 
-  /* ---- 옛 이름(pkems.…)으로 브라우저에 남아 있는 것 이어받기 ----
+  var LS = {
+    entries: "trace.entries.v2",
+    settings: "trace.settings.v1",
+    tombs: "trace.tombstones.v1",
+    draft: "trace.draft.v1",
+    folder: "trace.folder",
+    cid: "trace.clientId",
+    connected: "trace.connected",
+    token: "trace.token.v1",     // 새로고침해도 로그인이 안 풀리게 (만료시각까지만)
+    email: "trace.email"         // 다시 받을 때 계정 고르는 화면을 건너뛰려고
+  };
+
+  /* ---- 옛 이름으로 브라우저에 남아 있는 것 이어받기 ----
      이름을 바꾸는 순간, 쓰던 사람의 기록·설정·쓰다 만 글이 «없는 것»이 된다.
-     그래서 새 이름이 비어 있고 옛 이름에 값이 있으면 옮겨 담는다.
+     이름이 두 번 바뀌었으므로(pkems → peer → trace) «최근 것부터» 차례로 찾는다.
      ⚠️ 옛 것은 지우지 않는다. 옛 버전으로 되돌아가야 할 일이 생길 수 있다. */
+  var OLD_KEY_PREFIXES = ["peer.", "pkems."];
   (function inheritOldKeys() {
     try {
       Object.keys(LS).forEach(function (k) {
-        var now = LS[k], was = now.replace(/^peer\./, "pkems.");
-        if (localStorage.getItem(now) === null) {
-          var v = localStorage.getItem(was);
-          if (v !== null) localStorage.setItem(now, v);
+        var now = LS[k];
+        if (localStorage.getItem(now) !== null) return;
+        for (var i = 0; i < OLD_KEY_PREFIXES.length; i++) {
+          var v = localStorage.getItem(now.replace(/^trace\./, OLD_KEY_PREFIXES[i]));
+          if (v !== null) { localStorage.setItem(now, v); return; }
         }
       });
     } catch (e) { /* 저장소가 막혀 있어도 앱은 그대로 쓴다 */ }
@@ -1394,7 +1407,7 @@
   // 예: 구글 문서로 변환 저장 → mimeType=google-apps.document, mediaType=text/html
   function uploadFile(name, mimeType, payload, isBase64, fileId, parentId, mediaType) {
     var media = mediaType || mimeType;
-    var boundary = "peer" + Math.random().toString(36).slice(2);
+    var boundary = "trace" + Math.random().toString(36).slice(2);
     var d = "\r\n--" + boundary + "\r\n", c = "\r\n--" + boundary + "--";
     var meta = fileId ? { name: name } : { name: name, mimeType: mimeType, parents: [parentId || folder.id] };
     var body = d + "Content-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(meta) +
@@ -1684,6 +1697,8 @@
         case "시간": return ctx.time;
         case "유형": return ctx.type;
         case "제목": return ctx.title;
+        case "태그": return ctx.tag;             // 첫 태그. 없으면 빈칸 (구분자는 알아서 정리된다)
+        case "자료제목": return ctx.caption;      // 이 사진·파일에 적어 둔 제목
         case "번호": return ctx.no;
         case "원본이름": return ctx.stem;
         case "확장자": return ctx.ext.replace(/^\./, "");
@@ -1695,20 +1710,30 @@
     out = out.replace(/_{2,}/g, "_").replace(/^[_\s-]+/, "").replace(/[_\s-]+$/, "");
     return out || "무제";
   }
-  function nameContext(entry, order, original, ext) {
+  /* 태그는 여러 개일 수 있다. 파일 이름에는 «첫 태그» 만 넣는다.
+     전부 넣으면 이름이 걷잡을 수 없이 길어지고, 태그 순서를 바꾸면 이름도 바뀐다. */
+  function firstTag(entry) {
+    var t = (entry && entry.tags || []).filter(Boolean)[0];
+    return t ? safeName(String(t), 24) : "";
+  }
+  function nameContext(entry, order, original, ext, caption) {
     return {
       folder: folderLabel(), subfolder: subfolderLabel(),
       date: dateStamp(entry.createdAt), time: timeStamp(entry.createdAt),
       type: typeOf(entry.type).label,
       title: safeName(entry.title, 40) || "무제",
+      tag: firstTag(entry),
+      caption: safeName(String(caption || ""), 40),
       no: pad2(order || 1),
       stem: safeName(stemOf(original || ""), 40),
       ext: ext || ""
     };
   }
-  function attachName(entry, order, original) {
+  /* 사진·파일 이름.
+     block 을 함께 주면 그 자료에 적어 둔 제목({자료제목})까지 이름에 들어간다. */
+  function attachName(entry, order, original, block) {
     var ext = extOf(original);
-    var ctx = nameContext(entry, order, original, ext);
+    var ctx = nameContext(entry, order, original, ext, block && block.caption);
     if (!ctx.stem) ctx.stem = "파일";
     var name = applyPattern(settings.filePattern, ctx);
     if (settings.filePattern.indexOf("{확장자}") < 0) name += ext;
@@ -1725,6 +1750,8 @@
       date: dateStamp(), time: timeStamp(),
       type: typeOf(currentType).label,
       title: safeName($("title") && $("title").value, 40) || "수업 회고",
+      tag: safeName((($("tags") && $("tags").value) || "").split(",")[0].trim(), 24) || "수업설계",
+      caption: isMd ? "" : "칠판 정리",
       no: "01", stem: "IMG_4821", ext: isMd ? ".md" : ".png"
     };
     var out = applyPattern(pattern, ctx);
@@ -2183,25 +2210,31 @@
       body: JSON.stringify({ name: name })
     }).catch(function () { return null; });
   }
-  function findOrInherit(newName, oldName) {
+  // 옛 이름은 여러 개일 수 있다(PEER → PKEMS 순). 최근 것부터 찾는다.
+  function findOrInherit(newName, oldNames) {
     return findInFolder(newName, folder.id).then(function (id) {
       if (id) return id;
-      return findInFolder(oldName, folder.id).then(function (oldId) {
-        if (!oldId) return null;
-        console.info("옛 이름 " + oldName + " 을 " + newName + " 으로 이어받습니다.");
-        return renameFile(oldId, newName).then(function () { return oldId; });
-      });
+      return (oldNames || []).reduce(function (chain, old) {
+        return chain.then(function (found) {
+          if (found) return found;
+          return findInFolder(old, folder.id).then(function (oldId) {
+            if (!oldId) return null;
+            console.info("옛 이름 " + old + " 을 " + newName + " 으로 이어받습니다.");
+            return renameFile(oldId, newName).then(function () { return oldId; });
+          });
+        });
+      }, Promise.resolve(null));
     });
   }
 
   function findIndexFile() {
     if (indexFileId) return Promise.resolve(indexFileId);
-    return findOrInherit(INDEX_NAME, OLD_INDEX_NAME).then(function (id) { indexFileId = id; return id; });
+    return findOrInherit(INDEX_NAME, OLD_INDEX_NAMES).then(function (id) { indexFileId = id; return id; });
   }
   function saveIndex() {
     pruneTombs();
     var content = JSON.stringify(
-      { version: 3, app: "PEER", entries: entries.map(slim), deleted: tombstones }, null, 2);
+      { version: 3, app: "TRACE", entries: entries.map(slim), deleted: tombstones }, null, 2);
     return findIndexFile().then(function (id) {
       return uploadFile(INDEX_NAME, "application/json", content, false, id, folder.id);
     }).then(function (r) { if (r && r.id) indexFileId = r.id; });
@@ -2236,14 +2269,14 @@
   function saveSettingsRemote() {
     if (!connected || !folder.id) return Promise.resolve();
     var content = JSON.stringify(settings, null, 2);
-    var p = settingsFileId ? Promise.resolve(settingsFileId) : findOrInherit(SETTINGS_NAME, OLD_SETTINGS_NAME);
+    var p = settingsFileId ? Promise.resolve(settingsFileId) : findOrInherit(SETTINGS_NAME, OLD_SETTINGS_NAMES);
     return p.then(function (id) {
       settingsFileId = id;
       return uploadFile(SETTINGS_NAME, "application/json", content, false, id, folder.id);
     }).then(function (r) { if (r && r.id) settingsFileId = r.id; }).catch(function () {});
   }
   function loadSettingsRemote() {
-    return findOrInherit(SETTINGS_NAME, OLD_SETTINGS_NAME).then(function (id) {
+    return findOrInherit(SETTINGS_NAME, OLD_SETTINGS_NAMES).then(function (id) {
       if (!id) return null;
       settingsFileId = id;
       return driveFetch("https://www.googleapis.com/drive/v3/files/" + id + "?alt=media&supportsAllDrives=true")
@@ -2529,7 +2562,10 @@
   }
   function previewAttachName(b) {
     if (b.name) return b.name;
-    return attachName({ createdAt: Date.now(), title: $("title").value, type: currentType }, mediaOrder(b), b.original || "file");
+    return attachName({
+      createdAt: Date.now(), title: $("title").value, type: currentType,
+      tags: ($("tags").value || "").split(",").map(function (t) { return t.trim(); }).filter(Boolean)
+    }, mediaOrder(b), b.original || "file", b);
   }
 
   function renderBlocks() {
@@ -4250,7 +4286,7 @@
       if (c.kind === "link" && !/^(https?:|mailto:)/i.test(c.url)) c.url = "https://" + c.url.replace(/^\/+/, "");
       if (c.kind === "image" || c.kind === "file") {
         order++;
-        if (!c.name) c.name = attachName(n, order, c.original || "file");
+        if (!c.name) c.name = attachName(n, order, c.original || "file", c);
       }
       return c;
     });
@@ -5141,7 +5177,7 @@
     L.push("");
     var sub = ["기록 " + list.length + "편"];
     var range = bookRange(list); if (range) sub.push(range);
-    sub.push("PEER 로 엮음 · " + dateStamp());
+    sub.push("TRACE 로 엮음 · " + dateStamp());
     L.push("> " + sub.join(" · "));
     L.push("");
 
@@ -5194,7 +5230,7 @@
     H.push('<h1 class="booktitle">' + esc(o.title || "기록 모음") + "</h1>");
     var sub = ["기록 " + list.length + "편"];
     var range = bookRange(list); if (range) sub.push(range);
-    sub.push("PEER 로 엮음 · " + dateStamp());
+    sub.push("TRACE 로 엮음 · " + dateStamp());
     H.push('<p class="booksub">' + esc(sub.join("  ·  ")) + "</p>");
 
     if (o.toc) {
@@ -5863,7 +5899,7 @@
        ② 💻 즐겨찾기 한 줄(북마클릿) → 주소 뒤 #capture= 에 담겨 온다
      둘 다 «쓰던 글에 이어 붙인다». 덮어쓰지 않는다.
      ========================================================= */
-  var SHARE_CACHE = "peer-share-inbox";
+  var SHARE_CACHE = "trace-share-inbox";
 
   function urlHost(u) {
     try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
@@ -6162,7 +6198,7 @@
       order++;
       out.push({
         type: "file", icon: fileIcon(b.mime, b.original),
-        name: b.name || attachName(n, order, b.original || "file"),
+        name: b.name || attachName(n, order, b.original || "file", b),
         size: b.size, fileId: b.fileId, pending: !b.fileId, entry: n, ord: 10 + order
       });
     });
@@ -7257,7 +7293,7 @@
       var fImp = el("div", "field");
       fImp.appendChild(el("label", null, "폴더에 있는데 목록에 없는 것 가져오기"));
       fImp.appendChild(el("p", "desc",
-        "이 앱은 색인 파일(PEER-index.json)을 보고 목록을 만듭니다. 그래서 옵시디언에서 만든 노트나 " +
+        "이 앱은 색인 파일(TRACE-index.json)을 보고 목록을 만듭니다. 그래서 옵시디언에서 만든 노트나 " +
         "드라이브에 직접 넣은 .md 파일은 목록에 안 보입니다. 아래 버튼을 누르면 폴더를 훑어서 " +
         "그런 파일들을 찾아 색인에 넣어 줍니다. (같은 폴더의 사진·첨부도 함께 연결합니다)"));
       var rImp = el("div", "row");
@@ -7315,11 +7351,11 @@
       var r3 = el("div", "row");
       var ex = el("button", "btn sm", "전체 기록 JSON 내려받기");
       ex.addEventListener("click", function () {
-        var blob = new Blob([JSON.stringify({ version: 2, app: "PEER", settings: settings, entries: entries.map(slim) }, null, 2)],
+        var blob = new Blob([JSON.stringify({ version: 2, app: "TRACE", settings: settings, entries: entries.map(slim) }, null, 2)],
           { type: "application/json" });
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = "PEER-backup-" + dateStamp() + ".json";
+        a.download = "TRACE-backup-" + dateStamp() + ".json";
         a.click();
       });
       r3.appendChild(ex);

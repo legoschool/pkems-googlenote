@@ -1,4 +1,4 @@
-/* PEER 서비스 워커 — «설치되는 앱» 이 되기 위한 최소한만 한다.
+/* TRACE 서비스 워커 — «설치되는 앱» 이 되기 위한 최소한만 한다.
  *
  * ⚠️ index.html 을 절대 캐시하지 않는다.
  *    이 앱은 index.html 한 개를 고쳐서 배포하는 구조라, 캐시에 물고 있으면
@@ -27,7 +27,7 @@ var OFFLINE_HTML =
  * 앱 주소로 돌려보낸다. 화면 쪽에서 그것을 꺼내 블록으로 만든다.
  * 왜 캐시냐 — 파일(사진)을 통째로 담아 옮길 수 있는 가장 단순한 그릇이다.
  */
-var SHARE_CACHE = "peer-share-inbox";
+var SHARE_CACHE = "trace-share-inbox";
 
 function takeShare(request) {
   return request.formData().then(function (form) {
