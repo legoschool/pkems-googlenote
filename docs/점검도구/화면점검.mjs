@@ -112,6 +112,165 @@ const b = JSON.parse(boot);
 check("첫 화면이 그려진다", b.editor && b.addButtons > 0, `＋버튼 ${b.addButtons}개`);
 check("자바스크립트 오류 없음", errors.length === 0, errors[0] || "");
 
+/* ---------- 1-2. 모양 프리셋 ----------
+   처음 온 사람(기록이 하나도 없는 사람)에게는 «어떤 모양으로 쓸까요?» 를 먼저 묻는다.
+   이걸 안 치우면 뒤따르는 점검이 전부 이 창에 가로막힌다 — 실제 사람도 마찬가지다. */
+await wait(700);
+const askedLook = await evaluate(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('어떤 모양으로'));
+  return m ? Array.from(m.querySelectorAll('.themecard .themename strong')).map(e => e.textContent).join(",") : 'NO_ASK';
+})()`);
+check("처음 오면 모양부터 묻는다", askedLook === "블록놀이,메모지,블록,공책,기본,문서,설계도", String(askedLook));
+
+// «블록» 을 골라 보고, 화면이 실제로 그 값으로 바뀌는지 본다
+const picked = await evaluate(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('어떤 모양으로'));
+  if (!m) return 'NO_MODAL';
+  // 이름이 겹친다 — '블록'을 찾으면 '블록놀이'가 먼저 잡힌다. 이름 칸만 정확히 견준다.
+  const c = Array.from(m.querySelectorAll('.themecard')).find(x => {
+    const n = x.querySelector('.themename strong');
+    return n && n.textContent === '블록';
+  });
+  if (!c) return 'NO_CARD';
+  c.click();
+  const cs = getComputedStyle(document.documentElement);
+  return JSON.stringify({
+    attr: document.documentElement.getAttribute('data-theme'),
+    bg: cs.getPropertyValue('--bg').trim(),
+    bw: cs.getPropertyValue('--bw').trim(),
+    stud: cs.getPropertyValue('--stud').trim()
+  });
+})()`);
+const pk = /^NO_/.test(picked) ? null : JSON.parse(picked);
+check("고르면 그 자리에서 값이 바뀐다",
+  !!pk && pk.attr === "brick" && pk.bw === "2.5px" && pk.stud === "block",
+  pk ? `${pk.attr} · 테두리 ${pk.bw} · 돌기 ${pk.stud}` : String(picked));
+
+await evaluate(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('어떤 모양으로'));
+  const go = Array.from(m.querySelectorAll('.mfoot button')).find(b => b.textContent.includes('시작하기'));
+  go.click(); return true;
+})()`);
+await wait(500);
+const kept = await evaluate(`JSON.stringify({
+  saved: (JSON.parse(localStorage.getItem('trace.settings.v1')||'{}')).theme || '',
+  open: !!document.querySelector('.modal-bg')
+})`);
+const kp = JSON.parse(kept);
+check("고른 모양이 설정에 남는다", kp.saved === "brick", kp.saved || "(빈 값)");
+check("고르고 나면 창이 닫힌다", !kp.open);
+
+/* 기록 카드가 «유형 색» 을 물려받는지 — 프리셋의 핵심이다.
+   색을 유형 키로 정하면 사용자가 만든 유형에 색이 없어지므로, 차례(자리)로 돌려 쓴다. */
+const tinted = await evaluate(`(() => {
+  const chips = Array.from(document.querySelectorAll('#typeChips .chip'));
+  if (chips.length < 3) return 'NO_CHIPS';
+  const v = chips.slice(0, 3).map(c => getComputedStyle(c).getPropertyValue('--c').trim());
+  return JSON.stringify(v);
+})()`);
+const tn = /^NO_/.test(tinted) ? null : JSON.parse(tinted);
+check("유형마다 다른 색이 붙는다", !!tn && new Set(tn).size >= 3, tn ? tn.join(" ") : String(tinted));
+
+// 다시 기본으로 돌려 놓는다. 뒤따르는 점검이 «지금 화면» 기준으로 짜여 있다.
+await evaluate(`(() => {
+  const s = JSON.parse(localStorage.getItem('trace.settings.v1') || '{}');
+  s.theme = 'base'; localStorage.setItem('trace.settings.v1', JSON.stringify(s));
+  document.documentElement.removeAttribute('data-theme');
+  return true;
+})()`);
+
+/* ---------- 1-3. 녹음 — 제목과 내용이 갈려 있는가 ----------
+   전에는 받아 적은 글의 앞 60자가 «자료 제목» 이 되어 파일 이름에 통째로 박혔다.
+   («2026-08-21_부기_협의회_아직 교사가 안 다듬어져서 요거 다듬어지고…_02.webm»)
+   제목은 사람이 짧게 적는 칸이 따로 있어야 하고, 말한 내용은 글 블록이 맡아야 한다. */
+await evaluate(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
+const voiceUi = await evaluate(`(() => {
+  const b = Array.from(document.querySelectorAll('[data-add]')).find(x => (x.textContent||'').includes('녹음'));
+  if (!b) return 'NO_BUTTON';
+  b.click();
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('녹음'));
+  if (!m) return 'NO_MODAL';
+  const labels = Array.from(m.querySelectorAll('.field > label')).map(e => e.textContent);
+  return JSON.stringify({ labels: labels, inputs: m.querySelectorAll('.field input.inp').length });
+})()`);
+const vu = /^NO_/.test(voiceUi) ? null : JSON.parse(voiceUi);
+check("녹음 창에 «제목» 칸이 따로 있다",
+  !!vu && vu.labels.some(l => /제목/.test(l)) && vu.labels.some(l => /받아 적은 글/.test(l)) && vu.inputs >= 1,
+  vu ? vu.labels.join(" / ") : String(voiceUi));
+
+// 제목을 비운 채로 받아 적은 글만 넣어 본다 — 그 글이 «자료 제목» 으로 새면 안 된다
+const voiceSplit = await evaluate(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('녹음'));
+  const ta = m.querySelector('textarea.inp');
+  ta.value = '아직 교사가 안 다듬어져서 요거 다듬어지고 나면 이제 학생은 거기에 맞게 그냥 세팅만 하거든요';
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  const go = Array.from(m.querySelectorAll('.mfoot button')).find(b => /넣기|담기|넣습|확인|저장/.test(b.textContent||''));
+  if (go) go.click();
+  return go ? 'OK' : Array.from(m.querySelectorAll('.mfoot button')).map(b=>b.textContent).join('|');
+})()`);
+await wait(700);
+const blocksNow = await evaluate(`(() => {
+  const nodes = Array.from(document.querySelectorAll('#blocks .block'));
+  const txt = nodes.map(n => (n.querySelector('.bkind')||{}).textContent || '').join(',');
+  const caps = nodes.map(n => { const i = n.querySelector('input.inp'); return i ? i.value : ''; }).filter(Boolean);
+  return JSON.stringify({ kinds: txt, caps: caps });
+})()`);
+const bn = JSON.parse(blocksNow);
+check("받아 적은 글이 «자료 제목» 으로 새지 않는다",
+  !bn.caps.some(c => /다듬어져서/.test(c)),
+  bn.caps.length ? bn.caps.join(" | ") : "(제목 칸 비어 있음)");
+await evaluate(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove());
+  blocks = []; return true; })()`).catch(() => {});
+await evaluate(`(() => {
+  document.querySelectorAll('#blocks .block').forEach(n => {
+    const x = Array.from(n.querySelectorAll('button')).find(b => /✕|×/.test(b.textContent||''));
+    if (x) x.click();
+  });
+  return true;
+})()`);
+await wait(400);
+
+/* ---------- 1-4. 폴더 정리 방식 — 고르는 목록이 그림을 가리지 않는가 ----------
+   전에는 <select> 였다. 펼치면 그 아래 폴더 그림을 통째로 덮었다 — 정작 봐야 할 것을 가렸다. */
+await evaluate(`document.getElementById('btnSettings').click(); true`);
+await wait(500);
+await evaluate(`(() => {
+  const t = Array.from(document.querySelectorAll('.tabs .tab')).find(x => x.textContent === '저장 위치');
+  if (t) t.click(); return true;
+})()`);
+await wait(600);
+const modeUi = await evaluate(`(() => {
+  const cards = Array.from(document.querySelectorAll('.modecard'));
+  return JSON.stringify({
+    cards: cards.length,
+    selects: document.querySelectorAll('.mbody select').length,
+    trees: document.querySelectorAll('.modecard .ftree').length,
+    icons: document.querySelectorAll('.modecard .ftree svg').length,
+    browse: !!Array.from(document.querySelectorAll('.mbody button')).find(b => (b.textContent||'').includes('찾아보기'))
+  });
+})()`);
+const mu = JSON.parse(modeUi);
+check("정리 방식 다섯이 한눈에 펼쳐진다", mu.cards === 5, `카드 ${mu.cards}개`);
+check("고르는 목록(select)이 그림을 덮지 않는다", mu.selects === 0, `select ${mu.selects}개`);
+check("방식마다 폴더 그림이 붙는다", mu.trees === 5 && mu.icons >= 15, `그림 ${mu.trees}개 · 아이콘 ${mu.icons}개`);
+check("«폴더 찾아보기» 단추가 있다", mu.browse === true);
+
+// 눌러서 바꾸면 그 카드로 «고름» 이 옮겨가야 한다
+const switched = await evaluate(`(() => {
+  const cards = Array.from(document.querySelectorAll('.modecard'));
+  const target = cards.find(c => !c.classList.contains('on'));
+  if (!target) return 'NO_TARGET';
+  const name = target.querySelector('strong').textContent;
+  target.click();
+  const nowOn = document.querySelector('.modecard.on strong');
+  return JSON.stringify({ picked: name, on: nowOn ? nowOn.textContent : '' });
+})()`);
+const sw = /^NO_/.test(switched) ? null : JSON.parse(switched);
+check("눌러서 정리 방식을 바꿀 수 있다", !!sw && sw.picked === sw.on, sw ? `${sw.picked} → ${sw.on}` : String(switched));
+await evaluate(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
+
 /* ---------- 2. 사진을 하나 넣는다 (파일 고르기 없이 직접 투입) ---------- */
 // 잔무늬가 많은 200x120 PNG. 줄무늬로 하면 «칸 크기와 줄 간격이 맞아» 뭉갠 티가 안 나서
 // 판정이 흐려진다. 매번 같은 그림이 나오도록 씨앗을 고정한 잡음을 쓴다.
@@ -279,11 +438,14 @@ if (studio === "OPEN") {
   await wait(700);
   const setup = JSON.parse(await evaluate(`JSON.stringify({
     thumbs: document.querySelectorAll('.maskthumb').length,
-    sizes: Array.from(document.querySelectorAll('.modebar button')).map(b => b.textContent.trim()),
+    sizes: Array.from(document.querySelectorAll('.modebar:not(.grainbar) button')).map(b => b.textContent.trim()),
+    grains: Array.from(document.querySelectorAll('.grainbar button')).map(b => b.textContent.trim()),
     canvasW: document.querySelector('.maskpad').width
   })`));
   check("이 기록의 사진이 전부 늘어선다", setup.thumbs >= 3, `${setup.thumbs}장`);
   check("원 크기를 고를 수 있다", setup.sizes.length === 4, setup.sizes.join(" / "));
+  // 「픽셀이 너무 크다」는 말을 이 자리에서 풀 수 있어야 한다
+  check("모자이크 칸 굵기를 고를 수 있다", setup.grains.length === 3, setup.grains.join(" / "));
 
   // 가운데를 한 번 «톡» 누른다
   const stamped = JSON.parse(await evaluate(`(() => {

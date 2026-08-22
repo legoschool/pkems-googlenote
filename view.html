@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#ffffff" />
+<meta name="robots" content="noindex, nofollow" />
+<title>기록 보기 · 구글 기록장</title>
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
+<style>
+  /* ─────────────────────────────────────────────────────────
+     받는 사람이 보는 쪽. 로그인도 앱도 필요 없다.
+     글은 주소 뒤(#)에 담겨 오고, 사진·영상·녹음은 드라이브에서 바로 불러온다.
+     ⚠️ 이 파일은 index.html 과 «따로» 돈다. 여기 색 토큰을 고치면 저쪽도 같이 맞춰야 한다.
+     ───────────────────────────────────────────────────────── */
+  :root {
+    --bg: #f5f7fb; --panel: #fff; --ink: #1b2130; --ink-soft: #667085;
+    --brand: #2f5fd6; --line: #e3e8f2; --line-soft: #eef1f7;
+    --font-body: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    --font-title: var(--font-body);
+    --radius: 14px; --bw: 1px;
+    --shadow: 0 1px 3px rgba(20,30,60,.06), 0 8px 24px rgba(20,30,60,.06);
+  }
+  [data-theme="memo"], [data-theme="brick"], [data-theme="play"] {
+    --bg: #FBF6EE; --panel: #FFFDF8; --ink: #26221E; --ink-soft: #6E6459;
+    --brand: #A8483C; --line: #26221E; --line-soft: #E2D8C6;
+    --font-title: "Gaegu", var(--font-body); --bw: 2.5px; --shadow: none;
+  }
+  [data-theme="brick"] { --radius: 8px; }
+  [data-theme="play"] { --radius: 18px; --bw: 3.5px; --font-title: "Jua", var(--font-body); }
+  [data-theme="note"] {
+    --bg: #EFE7DA; --panel: #FFFCF5; --ink: #26221E; --ink-soft: #6E6459;
+    --brand: #A8483C; --line: #DCD1BE; --line-soft: #EFE7DA;
+    --font-title: "Gaegu", var(--font-body); --radius: 4px; --bw: 1.5px; --shadow: none;
+  }
+  [data-theme="paper"] {
+    --bg: #F4F2ED; --panel: #fff; --ink: #1F1D1A; --ink-soft: #6B6660;
+    --brand: #3A4A5C; --line: #DAD5CC; --line-soft: #EDEAE3;
+    --font-body: "Gowun Batang", serif; --font-title: "Gowun Batang", serif;
+    --radius: 2px; --shadow: none;
+  }
+  [data-theme="draft"] {
+    --bg: #EDF1F4; --panel: #fff; --ink: #16202B; --ink-soft: #5A6B7C;
+    --brand: #0E6FA8; --line: #C6D2DC; --line-soft: #E6ECF1;
+    --font-body: "IBM Plex Sans KR", sans-serif; --font-title: "IBM Plex Sans KR", sans-serif;
+    --radius: 0px; --shadow: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12161f; --panel: #1b202b; --ink: #e8ecf4; --ink-soft: #98a2b3;
+            --brand: #7d9dff; --line: #2b3242; --line-soft: #232936;
+            --shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25); }
+    [data-theme="memo"], [data-theme="brick"], [data-theme="note"], [data-theme="play"],
+    [data-theme="paper"], [data-theme="draft"] {
+      --bg: #1C1917; --panel: #24201C; --ink: #F0E9DD; --ink-soft: #A79B8B;
+      --brand: #E08A7C; --line: #4A423A; --line-soft: #332D27;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body);
+         font-size: 16px; line-height: 1.75; word-break: keep-all; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 80px; }
+  .paper { background: var(--panel); border: var(--bw) solid var(--line); border-radius: var(--radius);
+           box-shadow: var(--shadow); padding: 30px 28px 34px; }
+  @media (max-width: 600px) { .paper { padding: 22px 16px 26px; } .wrap { padding: 14px 10px 60px; } }
+  h1 { font-family: var(--font-title); font-size: 27px; line-height: 1.35; margin: 6px 0 10px; }
+  h2 { font-family: var(--font-title); font-size: 19px; margin: 30px 0 8px; }
+  p { margin: 0 0 14px; white-space: pre-wrap; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+          font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+  .tag { border: var(--bw) solid var(--line); border-radius: 999px; padding: 1px 9px; font-size: 12.5px; }
+  hr { border: none; border-top: var(--bw) solid var(--line); margin: 22px 0; }
+  blockquote { margin: 0 0 16px; padding: 8px 16px; border-left: 3px solid var(--brand);
+               background: var(--bg); border-radius: 0 10px 10px 0; color: var(--ink-soft); white-space: pre-wrap; }
+  a { color: var(--brand); }
+  figure { margin: 0 0 18px; }
+  figure img { width: 100%; height: auto; border-radius: 10px; border: var(--bw) solid var(--line); display: block; }
+  figcaption { font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+  /* 영상·녹음은 드라이브 재생기를 그대로 끼워 넣는다. 브라우저마다 코덱이 달라서 이 편이 확실하다. */
+  .player { width: 100%; border: var(--bw) solid var(--line); border-radius: 10px; background: var(--bg); }
+  .player.video { aspect-ratio: 16 / 9; }
+  /* ⚠️ 62px 로 두면 드라이브 재생기가 잘려서 «Google Drive» 글자만 보인다.
+     여기는 우리 재생기가 아니라 드라이브가 그리는 쪽이라, 그쪽이 필요로 하는 만큼 줘야 한다. */
+  .player.audio { height: 168px; }
+  .fileline { display: flex; align-items: center; gap: 9px; border: var(--bw) solid var(--line);
+              border-radius: 10px; padding: 10px 13px; text-decoration: none; color: var(--ink);
+              background: var(--bg); margin: 0 0 12px; }
+  .fileline:hover { border-color: var(--brand); color: var(--brand); }
+  .linkcard { display: block; border: var(--bw) solid var(--line); border-radius: 10px;
+              padding: 11px 14px; text-decoration: none; color: var(--ink); background: var(--bg); margin: 0 0 12px; }
+  .linkcard:hover { border-color: var(--brand); }
+  .linkcard b { display: block; font-size: 14.5px; }
+  .linkcard span { font-size: 12.5px; color: var(--ink-soft); word-break: break-all; }
+  .foot { text-align: center; font-size: 12.5px; color: var(--ink-soft); margin-top: 22px; line-height: 1.9; }
+  .foot a { color: var(--ink-soft); }
+  .oops { background: var(--panel); border: var(--bw) solid var(--line); border-radius: var(--radius);
+          padding: 26px 22px; text-align: center; }
+  .oops b { display: block; font-size: 17px; margin-bottom: 8px; }
+  .oops p { color: var(--ink-soft); font-size: 14px; white-space: normal; }
+  .imgfall { font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="oops"><b>여는 중…</b><p>잠시만 기다려 주세요.</p></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ── 주소 뒤에 담겨 온 꾸러미를 푼다 ──
+     ⚠️ index.html 의 encodePacket() 과 «짝» 이다. 한쪽을 고치면 다른 쪽도 고쳐야 한다.
+     맨 앞 한 글자가 표시다: "1" 이면 gzip 으로 눌린 것, "0" 이면 그냥 담긴 것. */
+  function b64urlToBytes(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function decodePacket(raw) {
+    var mark = raw.charAt(0), body = raw.slice(1);
+    var bytes = b64urlToBytes(body);
+    if (mark !== "1") return Promise.resolve(new TextDecoder().decode(bytes));
+    if (typeof DecompressionStream === "undefined") {
+      return Promise.reject(new Error("이 브라우저는 압축을 못 풉니다. 크롬·엣지·사파리 최신판에서 열어 주세요."));
+    }
+    var ds = new DecompressionStream("gzip");
+    var w = ds.writable.getWriter();
+    /* ⚠️ write()·close() 가 돌려주는 약속을 그냥 두면 안 된다.
+       링크가 잘려서 풀다가 막히면 «아무도 안 받은 거부» 가 되어 콘솔에 오류로 남는다.
+       읽는 쪽(아래)에서 이미 같은 오류를 잡아 사람에게 말해 주므로, 여기서는 조용히 삼킨다. */
+    var hush = function () {};
+    w.write(bytes).catch(hush);
+    w.close().catch(hush);
+    return new Response(ds.readable).arrayBuffer().then(function (buf) {
+      return new TextDecoder().decode(new Uint8Array(buf));
+    });
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function oops(title, msg) {
+    var w = document.getElementById("wrap");
+    w.innerHTML = "";
+    var box = el("div", "oops");
+    box.appendChild(el("b", null, title));
+    box.appendChild(el("p", null, msg));
+    w.appendChild(box);
+  }
+  function fmtDate(ms) {
+    var d = new Date(ms);
+    if (isNaN(d.getTime())) return "";
+    function p(x) { return x < 10 ? "0" + x : "" + x; }
+    return d.getFullYear() + "." + p(d.getMonth() + 1) + "." + p(d.getDate());
+  }
+  function humanSize(b) {
+    if (!b) return "";
+    if (b < 1024) return b + "B";
+    if (b < 1048576) return Math.round(b / 1024) + "KB";
+    return (b / 1048576).toFixed(1) + "MB";
+  }
+  var FONT_OF = { memo: "Gaegu:wght@400;700", brick: "Gaegu:wght@400;700", note: "Gaegu:wght@400;700",
+                  play: "Jua", paper: "Gowun+Batang", draft: "IBM+Plex+Sans+KR:wght@400;500;600" };
+  function loadFont(theme) {
+    var fam = FONT_OF[theme];
+    if (!fam) return;
+    var l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?family=" + fam + "&display=swap";
+    document.head.appendChild(l);
+  }
+
+  /* ── 드라이브에 있는 것을 남에게 보여 주는 주소들 ──
+     ⚠️ 구글이 문서로 약속한 주소가 아니다. 언젠가 바뀔 수 있다.
+        그래서 사진은 한 곳이 막히면 다른 곳으로, 그것도 막히면 «열어 보기» 링크로 내려간다. */
+  function driveImg(id) { return "https://lh3.googleusercontent.com/d/" + id + "=w1600"; }
+  function driveThumb(id) { return "https://drive.google.com/thumbnail?id=" + id + "&sz=w1600"; }
+  function drivePreview(id) { return "https://drive.google.com/file/d/" + id + "/preview"; }
+  function driveOpen(id) { return "https://drive.google.com/file/d/" + id + "/view"; }
+
+  function imageBlock(b) {
+    var fig = el("figure");
+    if (!b.f) return null;
+    var img = el("img");
+    img.alt = b.c || b.n || "사진";
+    img.loading = "lazy";
+    img.src = driveImg(b.f);
+    var tried = 0;
+    img.onerror = function () {
+      tried++;
+      if (tried === 1) { img.src = driveThumb(b.f); return; }
+      // 둘 다 막혔다 — 그림 대신 «드라이브에서 열어 보기» 로 내려간다
+      var a = el("a", "fileline imgfall", "🖼️ " + (b.n || "사진") + " — 드라이브에서 열어 보기");
+      a.href = driveOpen(b.f); a.target = "_blank"; a.rel = "noopener noreferrer";
+      fig.replaceChildren(a);
+    };
+    fig.appendChild(img);
+    var cap = [b.c, b.n].filter(Boolean).join(" · ");
+    if (cap) fig.appendChild(el("figcaption", null, cap));
+    return fig;
+  }
+  function mediaBlock(b, kind) {
+    var box = el("div");
+    var f = el("iframe", "player " + kind);
+    f.src = drivePreview(b.f);
+    f.setAttribute("allow", "autoplay");
+    f.setAttribute("allowfullscreen", "");
+    f.setAttribute("loading", "lazy");
+    f.setAttribute("title", b.c || b.n || (kind === "video" ? "영상" : "녹음"));
+    box.appendChild(f);
+    var cap = [b.c, b.n].filter(Boolean).join(" · ");
+    if (cap) box.appendChild(el("figcaption", null, cap));
+    box.style.marginBottom = "18px";
+    return box;
+  }
+  function fileBlock(b) {
+    var a = el("a", "fileline", "📎 " + (b.c || b.n || "파일") + (b.s ? "  ·  " + humanSize(b.s) : ""));
+    a.href = driveOpen(b.f); a.target = "_blank"; a.rel = "noopener noreferrer";
+    return a;
+  }
+  function linkBlock(b) {
+    var a = el("a", "linkcard");
+    a.href = b.u; a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.appendChild(el("b", null, b.l || b.u));
+    var host = "";
+    try { host = new URL(b.u).hostname.replace(/^www\./, ""); } catch (e) { host = b.u; }
+    a.appendChild(el("span", null, host));
+    return a;
+  }
+
+  function render(p) {
+    if (p.th) { document.documentElement.setAttribute("data-theme", p.th); loadFont(p.th); }
+    document.title = (p.t || "기록") + " · 구글 기록장";
+
+    var w = document.getElementById("wrap");
+    w.innerHTML = "";
+    var paper = el("div", "paper");
+
+    var meta = el("div", "meta");
+    if (p.d) meta.appendChild(el("span", null, fmtDate(p.d)));
+    (p.g || []).forEach(function (t) { meta.appendChild(el("span", "tag", "#" + t)); });
+    paper.appendChild(meta);
+    paper.appendChild(el("h1", null, p.t || "(제목 없음)"));
+
+    (p.b || []).forEach(function (b) {
+      var node = null;
+      if (b.k === "text") node = el("p", null, b.x || "");
+      else if (b.k === "heading") node = el("h2", null, b.x || "");
+      else if (b.k === "quote") { node = el("blockquote"); node.textContent = b.x || ""; }
+      else if (b.k === "divider") node = el("hr");
+      else if (b.k === "image") node = imageBlock(b);
+      else if (b.k === "video") node = mediaBlock(b, "video");
+      else if (b.k === "audio") node = mediaBlock(b, "audio");
+      else if (b.k === "file") node = fileBlock(b);
+      else if (b.k === "link") node = linkBlock(b);
+      if (node) paper.appendChild(node);
+    });
+
+    w.appendChild(paper);
+
+    var foot = el("div", "foot");
+    foot.appendChild(document.createTextNode("「구글 기록장」으로 만든 쪽입니다. 보낸 사람이 고르면 언제든 닫을 수 있습니다."));
+    foot.appendChild(document.createElement("br"));
+    var home = el("a", null, "구글 기록장이란?");
+    home.href = "intro.html";
+    foot.appendChild(home);
+    w.appendChild(foot);
+  }
+
+  function boot() {
+  var raw = location.hash.replace(/^#/, "");
+  if (raw.indexOf("d=") === 0) raw = raw.slice(2);
+  if (!raw) {
+    oops("보여 줄 기록이 없습니다.", "링크가 잘린 것 같습니다. 보낸 사람에게 주소 전체를 다시 받아 주세요. (# 뒤가 길어서 잘리는 일이 있습니다)");
+    return;
+  }
+  decodePacket(raw)
+    .then(function (json) { return JSON.parse(json); })
+    .then(function (p) {
+      if (!p || typeof p !== "object") throw new Error("모양이 맞지 않습니다");
+      render(p);
+    })
+    .catch(function (e) {
+      oops("기록을 펴지 못했습니다.", (e && e.message ? e.message : "링크가 잘렸거나 손상된 것 같습니다.") +
+        "\n보낸 사람에게 주소 전체를 다시 받아 주세요.");
+    });
+  }
+  /* 주소의 # 만 바뀌면 브라우저는 쪽을 다시 읽지 않는다.
+     링크 두 개를 이어서 열면 앞의 기록이 그대로 남아, 엉뚱한 것을 보게 된다. */
+  window.addEventListener("hashchange", boot);
+  boot();
+})();
+</script>
+</body>
+</html>

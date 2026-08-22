@@ -176,7 +176,7 @@ await ev(`document.getElementById('btnSettings').click(); true`);
 await wait(500);
 const tabs = await ev(`JSON.stringify(Array.from(document.querySelectorAll('.tabs .tab')).map(t => t.textContent))`);
 const tabList = JSON.parse(tabs);
-check("설정 탭이 다 있다", tabList.length === 5, tabList.join(" / "));
+check("설정 탭이 다 있다", tabList.length === 6, tabList.join(" / "));
 for (const t of tabList) {
   const r = await ev(`(() => {
     const b = Array.from(document.querySelectorAll('.tabs .tab')).find(x => x.textContent === ${JSON.stringify(t)});

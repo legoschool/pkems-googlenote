@@ -14,13 +14,60 @@
 <title>구글 기록장 · TRACE 개인 지식·경험 관리 체계</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
+  /* =========================================================
+     모양 토큰 — 「프리셋」은 이 값들만 갈아 끼운다
+
+     ⚠️ 프리셋마다 화면 CSS 를 따로 쓰지 마세요.
+        그러면 기능을 하나 고칠 때마다 프리셋 수만큼 고쳐야 합니다.
+        새 화면을 만들 때도 색·굵기·모서리는 반드시 아래 토큰으로 쓰세요.
+        그래야 프리셋은 저절로 따라옵니다.
+     ========================================================= */
   :root {
     --bg: #f5f7fb; --panel: #fff; --ink: #1b2130; --ink-soft: #667085;
     --brand: #2f5fd6; --brand-dark: #24499f; --brand-soft: #eaf0ff;
     --line: #e3e8f2; --line-soft: #eef1f7;
     --danger: #d64545; --ok: #1a9e5f; --warn: #b07a00;
+    /* 알림 띠 — 뜻(주의/됨)은 그대로 두고 색만 프리셋이 고를 수 있게 한다 */
+    --warn-bg: #fff8e6; --warn-line: #f0dca8; --warn-ink: #6b4e00;
+    --ok-bg: #eaf7f0; --ok-line: #b9e3cd; --ok-ink: #0f5c39;
+    --pin-bg: #fff4d6;
     --shadow: 0 1px 3px rgba(20,30,60,.06), 0 8px 24px rgba(20,30,60,.06);
-    --radius: 14px;
+
+    /* 글꼴 */
+    --font-body: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+    --font-title: var(--font-body);
+    --title-spacing: -.3px;
+
+    /* 선·모서리 */
+    --bw: 1px;                 /* 테두리 굵기 */
+    --radius: 14px;            /* 카드 */
+    --r-btn: 10px;             /* 단추 */
+    --r-btn-sm: 8px;
+    --r-inp: 10px;             /* 입력칸 */
+    --r-pill: 999px;           /* 둥근 딱지(배지·태그·칩) */
+    --r-block: 12px;           /* 에디터 블록 */
+
+    /* 기록 카드.
+       ⚠️ --entry-bg: var(--c-soft) 처럼 쓰면 안 된다. 안쪽 var() 는 «선언한 곳(html)» 에서 풀려서
+          카드마다 다른 --c-soft 를 못 본다. 그래서 «덮개» 를 걷는 방식으로 한다 —
+          카드 바탕은 언제나 유형 색이고, 기본 프리셋은 그 위를 종이색으로 덮어 가린다. */
+    --veil: var(--panel);      /* 종이색 덮개. transparent 로 바꾸면 유형 색이 드러난다 */
+    --entry-pt: 16px;          /* 위쪽 여백 (돌기가 있으면 넓어진다) */
+    --accent-w: 3px;           /* 위쪽 색줄 */
+    --accent-l: 0px;           /* 왼쪽 색줄 */
+    --stud: none;              /* 레고 돌기 — 브릭 계열 프리셋만 block */
+    --stud-w: 82px;            /* 돌기 줄 너비 */
+    --stud-h: 11px;            /* 돌기 지름 */
+    --stud-step: 21px;         /* 돌기 사이 간격 */
+
+    /* 유형 색 여섯 자리. 유형은 사용자가 더 만들 수 있어서 «차례»로 돌려 쓴다.
+       기본 프리셋은 여섯 자리가 모두 같은 파랑 — 지금 화면 그대로다. */
+    --t1: #2f5fd6; --t1s: #eaf0ff;
+    --t2: #2f5fd6; --t2s: #eaf0ff;
+    --t3: #2f5fd6; --t3s: #eaf0ff;
+    --t4: #2f5fd6; --t4s: #eaf0ff;
+    --t5: #2f5fd6; --t5s: #eaf0ff;
+    --t6: #2f5fd6; --t6s: #eaf0ff;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -28,13 +75,172 @@
       --brand: #7d9dff; --brand-dark: #5f83f0; --brand-soft: #232c44;
       --line: #2b3242; --line-soft: #232936;
       --shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+      --warn-bg: #33291180; --warn-line: #5a4715; --warn-ink: #f0d78f;
+      --ok-bg: #10321f80; --ok-line: #1e5c3c; --ok-ink: #97e0bb;
+      --pin-bg: #3a2f12;
+      --t1: #7d9dff; --t1s: #232c44; --t2: #7d9dff; --t2s: #232c44;
+      --t3: #7d9dff; --t3s: #232c44; --t4: #7d9dff; --t4s: #232c44;
+      --t5: #7d9dff; --t5s: #232c44; --t6: #7d9dff; --t6s: #232c44;
+    }
+  }
+
+  /* ---------- 프리셋 A. 메모지 ---------- */
+  [data-theme="memo"] {
+    --bg: #FBF6EE; --panel: #FFFDF8; --ink: #26221E; --ink-soft: #6E6459;
+    --brand: #A8483C; --brand-dark: #7F352C; --brand-soft: #F6E2DC;
+    --line: #26221E; --line-soft: #E2D8C6;
+    --shadow: none;
+    --font-title: "Gaegu", var(--font-body); --title-spacing: -.5px;
+    --bw: 2.5px;
+    --radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    --r-btn: 225px 15px 255px 15px / 15px 255px 15px 225px;
+    --r-btn-sm: 225px 15px 255px 15px / 15px 255px 15px 225px;
+    --r-inp: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    --r-block: 15px 225px 15px 255px / 225px 15px 255px 15px;
+    --veil: transparent;
+    --accent-w: 0px;
+    --t1: #4A5B33; --t1s: #DFEAC8;
+    --t2: #2F5A7A; --t2s: #D6E6F2;
+    --t3: #75590F; --t3s: #FBE8BE;
+    --t4: #7A4D22; --t4s: #F7DFC4;
+    --t5: #8A4A60; --t5s: #F8DCE2;
+    --t6: #4C4370; --t6s: #E5DDF0;
+  }
+  /* ---------- 프리셋 B. 블록 ---------- */
+  [data-theme="brick"] {
+    --bg: #FBF6EE; --panel: #FFFDF8; --ink: #26221E; --ink-soft: #6E6459;
+    --brand: #A8483C; --brand-dark: #7F352C; --brand-soft: #F6E2DC;
+    --line: #26221E; --line-soft: #DED5C4;
+    --shadow: 2.5px 2.5px 0 #26221E;
+    --font-title: "Gaegu", var(--font-body); --title-spacing: -.5px;
+    --bw: 2.5px;
+    --radius: 8px; --r-btn: 7px; --r-btn-sm: 6px; --r-inp: 7px; --r-pill: 5px; --r-block: 7px;
+    --veil: transparent;
+    --entry-pt: 26px;
+    --accent-w: 0px;
+    --stud: block;
+    --t1: #4F6B3E; --t1s: #DFEAC8;
+    --t2: #3A5D85; --t2s: #D6E6F2;
+    --t3: #7A5A12; --t3s: #FBE8BE;
+    --t4: #8F5626; --t4s: #F7DFC4;
+    --t5: #8E4A60; --t5s: #F8DCE2;
+    --t6: #4C4370; --t6s: #E5DDF0;
+  }
+  /* ---------- 프리셋 C. 공책 ---------- */
+  [data-theme="note"] {
+    --bg: #EFE7DA; --panel: #FFFCF5; --ink: #26221E; --ink-soft: #6E6459;
+    --brand: #A8483C; --brand-dark: #7F352C; --brand-soft: #F6E2DC;
+    --line: #DCD1BE; --line-soft: #EFE7DA;
+    --shadow: none;
+    --font-title: "Gaegu", var(--font-body); --title-spacing: -.5px;
+    --bw: 1.5px;
+    --radius: 4px; --r-btn: 6px; --r-btn-sm: 5px; --r-inp: 6px; --r-block: 5px;
+    --accent-w: 0px; --accent-l: 5px;
+    --t1: #4F6B3E; --t1s: #DFEAC8;
+    --t2: #3A5D85; --t2s: #D6E6F2;
+    --t3: #7A5A12; --t3s: #FBE8BE;
+    --t4: #8F5626; --t4s: #F7DFC4;
+    --t5: #8E4A60; --t5s: #F8DCE2;
+    --t6: #4C4370; --t6s: #E5DDF0;
+  }
+  /* ---------- 프리셋 ①. 블록놀이 (가장 아이답게) ---------- */
+  [data-theme="play"] {
+    --bg: #FFF8E4; --panel: #FFFFFF; --ink: #2B2118; --ink-soft: #6F604D;
+    --brand: #D8402F; --brand-dark: #B22F21; --brand-soft: #FFE0DB;
+    --line: #2B2118; --line-soft: #F0E2C4;
+    --shadow: 0 5px 0 #2B2118;
+    --font-title: "Jua", var(--font-body); --title-spacing: 0px;
+    --bw: 3.5px;
+    --radius: 18px; --r-btn: 14px; --r-btn-sm: 12px; --r-inp: 14px; --r-pill: 999px; --r-block: 14px;
+    --veil: transparent;
+    --entry-pt: 34px;
+    --accent-w: 0px;
+    --stud: block; --stud-w: 108px; --stud-h: 18px; --stud-step: 27px;
+    --t1: #2F7A34; --t1s: #CDEBC6;
+    --t2: #1F63B8; --t2s: #CFE3F8;
+    --t3: #B07C00; --t3s: #FFEDB8;
+    --t4: #C7551A; --t4s: #FFDDC2;
+    --t5: #B83A70; --t5s: #FFD6E6;
+    --t6: #6B44B0; --t6s: #E4D8F8;
+  }
+  /* ---------- 프리셋 ⑥. 문서 (인쇄물처럼) ---------- */
+  [data-theme="paper"] {
+    --bg: #F4F2ED; --panel: #FFFFFF; --ink: #1F1D1A; --ink-soft: #6B6660;
+    --brand: #3A4A5C; --brand-dark: #2A3745; --brand-soft: #E7EBF0;
+    --line: #DAD5CC; --line-soft: #EDEAE3;
+    --shadow: none;
+    --font-body: "Gowun Batang", "Apple SD Gothic Neo", "Malgun Gothic", serif;
+    --font-title: "Gowun Batang", serif; --title-spacing: -.2px;
+    --bw: 1px;
+    --radius: 2px; --r-btn: 2px; --r-btn-sm: 2px; --r-inp: 2px; --r-pill: 2px; --r-block: 2px;
+    --veil: var(--panel);
+    --accent-w: 0px; --accent-l: 2px;
+    --t1: #4E6B4E; --t1s: #EAEFE9;
+    --t2: #43596F; --t2s: #E8EDF1;
+    --t3: #7A6636; --t3s: #F2EEE3;
+    --t4: #7A5540; --t4s: #F1EAE5;
+    --t5: #6E4A58; --t5s: #F0E9EC;
+    --t6: #55506E; --t6s: #EBEAF0;
+    --warn-bg: #F6F1E4; --warn-line: #E0D6BE; --warn-ink: #6B5A32;
+    --ok-bg: #EBF0EB; --ok-line: #CBD8CB; --ok-ink: #3E5540;
+    --pin-bg: #F2ECDC;
+  }
+  /* ---------- 프리셋 ⑦. 설계도 (가장 정밀하게) ---------- */
+  [data-theme="draft"] {
+    --bg: #EDF1F4; --panel: #FFFFFF; --ink: #16202B; --ink-soft: #5A6B7C;
+    --brand: #0E6FA8; --brand-dark: #0A5580; --brand-soft: #DCEDF8;
+    --line: #C6D2DC; --line-soft: #E6ECF1;
+    --shadow: none;
+    --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --font-title: "IBM Plex Sans KR", sans-serif; --title-spacing: -.2px;
+    --bw: 1px;
+    --radius: 0px; --r-btn: 0px; --r-btn-sm: 0px; --r-inp: 0px; --r-pill: 0px; --r-block: 0px;
+    --veil: var(--panel);
+    --accent-w: 2px; --accent-l: 0px;
+    --t1: #2E7D4F; --t1s: #E2F0E8;
+    --t2: #1B6FA8; --t2s: #DEEDF7;
+    --t3: #8A6D14; --t3s: #F4EEDC;
+    --t4: #A85A2B; --t4s: #F7E9DE;
+    --t5: #9C3F63; --t5s: #F6E3EA;
+    --t6: #55499B; --t6s: #E7E5F4;
+    --warn-bg: #EEF3F7; --warn-line: #C6D2DC; --warn-ink: #3E5468;
+    --ok-bg: #E9F2EC; --ok-line: #C2D8CA; --ok-ink: #2E5741;
+    --pin-bg: #E4EDF4;
+  }
+  /* 종이 프리셋의 어두운 화면 — 종이색을 어둡게 낮추고 잉크를 밝힌다.
+     이걸 빼면 어두운 화면을 쓰는 사람에게 흰 종이가 그대로 번쩍인다. */
+  @media (prefers-color-scheme: dark) {
+    [data-theme="memo"], [data-theme="brick"], [data-theme="note"], [data-theme="play"] {
+      --bg: #1C1917; --panel: #24201C; --ink: #F0E9DD; --ink-soft: #A79B8B;
+      --brand: #E08A7C; --brand-dark: #C4705F; --brand-soft: #3A2B26;
+      --line: #4A423A; --line-soft: #332D27;
+      --t1: #C5DBA6; --t1s: #313B26; --t2: #A9C9E4; --t2s: #24313D;
+      --t3: #E8CE8C; --t3s: #3B3320; --t4: #E2B589; --t4s: #3B2C1E;
+      --t5: #E3AFC0; --t5s: #3A252C; --t6: #C2B6E0; --t6s: #2C2740;
+    }
+    [data-theme="brick"] { --shadow: 2.5px 2.5px 0 #0F0D0B; }
+    [data-theme="play"] { --shadow: 0 5px 0 #0F0D0B; --brand: #F07A6C; --brand-dark: #D4604F; --brand-soft: #3E2823;
+      --t1: #9FD69B; --t1s: #24331F; --t2: #96C2F0; --t2s: #1E2C3D; --t3: #F0D48C; --t3s: #3A3018;
+      --t4: #F0B48C; --t4s: #3B2A1B; --t5: #F0A8C4; --t5s: #3A2029; --t6: #C4AEEF; --t6s: #2B2440; }
+    /* 문서·설계도는 «차가운 회색» 쪽으로 어둡게. 종이 계열과 섞으면 둘 다 탁해진다. */
+    [data-theme="paper"] {
+      --bg: #17181A; --panel: #202225; --ink: #E8E6E1; --ink-soft: #9C978F;
+      --brand: #A8BBD0; --brand-dark: #8FA3BA; --brand-soft: #262B33; --line: #37393D; --line-soft: #2A2C2F;
+      --t1: #A9C4A9; --t1s: #232A23; --t2: #A5BACD; --t2s: #212830; --t3: #CDBB8C; --t3s: #2C2921;
+      --t4: #CDAE96; --t4s: #2C2622; --t5: #C4A2AF; --t5s: #2B2427; --t6: #ADA8C6; --t6s: #26242E;
+    }
+    [data-theme="draft"] {
+      --bg: #10161C; --panel: #182028; --ink: #DCE6EF; --ink-soft: #8FA2B3;
+      --brand: #5FB3E0; --brand-dark: #4593BC; --brand-soft: #1B2B37; --line: #2C3945; --line-soft: #1E2833;
+      --t1: #7CC49B; --t1s: #1A2B22; --t2: #6FB4DE; --t2s: #172833; --t3: #D2BB78; --t3s: #2B2718;
+      --t4: #DFA277; --t4s: #2F241B; --t5: #D28FAA; --t5s: #2D1F26; --t6: #A79BDC; --t6s: #232040;
     }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--bg); color: var(--ink);
-    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+    font-family: var(--font-body);
     font-size: 15px; line-height: 1.62; -webkit-text-size-adjust: 100%;
   }
   a { color: var(--brand); }
@@ -51,7 +257,8 @@
   /* flex-wrap 이 없으면 단추가 화면 밖으로 밀려난다. 폰에서 실제로 그랬다. */
   .top-inner { max-width: 1000px; margin: 0 auto; padding: 9px 16px; display: flex; align-items: center;
                gap: 10px; flex-wrap: wrap; }
-  .logo { font-weight: 800; font-size: 16.5px; letter-spacing: -.3px; display: flex; align-items: center; gap: 7px; }
+  .logo { font-weight: 800; font-size: 16.5px; letter-spacing: var(--title-spacing); display: flex; align-items: center; gap: 7px;
+          font-family: var(--font-title); }
   .logo small { font-weight: 500; font-size: 12px; color: var(--ink-soft); letter-spacing: 0; }
   /* 좁은 화면에서는 머리줄 단추를 그림글자만 남긴다. 한 줄에 들어가야 목록이 위로 올라온다. */
   @media (max-width: 560px) {
@@ -64,36 +271,33 @@
   .acct { font-size: 12.5px; color: var(--ink-soft); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .btn {
-    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
-    padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 14px; transition: .15s; white-space: nowrap;
+    border: var(--bw) solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 8px 14px; border-radius: var(--r-btn); font-weight: 600; font-size: 14px; transition: .15s; white-space: nowrap;
+    font-family: var(--font-title); letter-spacing: var(--title-spacing);
   }
   .btn:hover { border-color: var(--brand); color: var(--brand); }
   .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
   .btn.primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
   .btn.ghost { background: transparent; }
   .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
-  .btn.sm { padding: 5px 10px; font-size: 13px; border-radius: 8px; }
-  .btn.xs { padding: 2px 7px; font-size: 12px; border-radius: 7px; font-weight: 500; }
+  .btn.sm { padding: 5px 10px; font-size: 13px; border-radius: var(--r-btn-sm); }
+  .btn.xs { padding: 2px 7px; font-size: 12px; border-radius: var(--r-btn-sm); font-weight: 500; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
 
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card { background: var(--panel); border: var(--bw) solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 
   /* ---------- 배너 ---------- */
   .banner { margin: 16px 0; padding: 12px 14px; border-radius: 12px; font-size: 13.5px;
             display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border: 1px solid var(--line); background: var(--panel); }
-  .banner.warn { background: #fff8e6; border-color: #f0dca8; color: #6b4e00; }
-  .banner.ok { background: #eaf7f0; border-color: #b9e3cd; color: #0f5c39; }
-  @media (prefers-color-scheme: dark) {
-    .banner.warn { background: #33291180; border-color: #5a4715; color: #f0d78f; }
-    .banner.ok { background: #10321f80; border-color: #1e5c3c; color: #97e0bb; }
-  }
+  .banner.warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+  .banner.ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
   .banner .grow { flex: 1 1 240px; }
   .banner.draft { background: var(--brand-soft); border-color: var(--brand); color: var(--brand);
                   font-weight: 600; margin: 16px 0 -6px; padding: 10px 14px; }
   .banner a { color: inherit; }
 
   /* ---------- 입력 공통 ---------- */
-  .inp { width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); outline: none; }
+  .inp { width: 100%; padding: 9px 12px; border: var(--bw) solid var(--line); border-radius: var(--r-inp); background: var(--bg); outline: none; }
   .inp:focus { border-color: var(--brand); background: var(--panel); }
   textarea.inp { resize: vertical; line-height: 1.75; }
   .field { margin-bottom: 14px; }
@@ -102,9 +306,103 @@
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .chip { border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft);
-          padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
-  .chip.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+  .chip { border: var(--bw) solid var(--line); background: var(--panel); color: var(--ink-soft);
+          padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px; font-weight: 600;
+          font-family: var(--font-title); }
+  .chip.on { background: var(--c-soft, var(--brand-soft)); border-color: var(--c, var(--brand)); color: var(--c, var(--brand)); }
+
+  /* 폴더 고르기 목록 */
+  .picklist { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto;
+              border: var(--bw) solid var(--line); border-radius: var(--r-inp); padding: 6px; background: var(--bg); }
+  .pickrow { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font: inherit;
+             color: var(--ink); background: var(--panel); border: var(--bw) solid var(--line-soft);
+             border-radius: var(--r-btn-sm); padding: 8px 10px; }
+  .pickrow:hover { border-color: var(--brand); color: var(--brand); }
+  .pickrow .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- 폴더 정리 방식 고르기 ---------- */
+  .modegrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+  @media (max-width: 640px) { .modegrid { grid-template-columns: 1fr; } }
+  .modecard { text-align: left; border: var(--bw) solid var(--line); background: var(--panel); color: var(--ink);
+              border-radius: var(--r-btn); padding: 11px 12px; display: flex; flex-direction: column; gap: 7px; font: inherit; }
+  .modecard.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .modecard .desc { margin: 0; }
+  .modehead { display: flex; align-items: baseline; gap: 7px; }
+  .modehead strong { font-size: 14.5px; font-family: var(--font-title); }
+  /* 폴더 그림 — 글자로 그린 나무보다 훨씬 빨리 읽힌다 */
+  .ftree { background: var(--bg); border: var(--bw) solid var(--line-soft); border-radius: 9px;
+           padding: 9px 10px; display: flex; flex-direction: column; gap: 3px; overflow-x: auto; }
+  .frow { display: flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; line-height: 1.5; }
+  .frow svg { flex: 0 0 auto; }
+  .frow .fname { overflow: hidden; text-overflow: ellipsis; }
+  .fnote { font-size: 11.5px; color: var(--ink-soft); margin-left: 4px; }
+
+  /* 목록 보기를 디렉토리처럼 */
+  .lfolder { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; font: inherit;
+             color: var(--ink); background: var(--bg); border: 0; border-bottom: var(--bw) solid var(--line);
+             padding: 9px 12px; font-family: var(--font-title); }
+  .lfolder:hover { color: var(--brand); }
+  .ltwist { width: 12px; color: var(--ink-soft); }
+  .lfname { font-weight: 700; font-size: 14px; }
+  .lwrap { display: block; }
+  .lrow.lin { padding-left: 34px; }
+  /* 연결 펼침 — 잇는 것은 편집·관계망에서, 여기서는 «보기» 만 */
+  .linkbtn { border: var(--bw) solid var(--line); background: var(--panel); border-radius: var(--r-pill);
+             padding: 1px 8px; font: inherit; font-size: 12px; color: var(--ink-soft); cursor: pointer; }
+  .linkbtn:hover, .linkbtn.on { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+  .linkpanel { display: flex; flex-direction: column; gap: 6px; padding: 9px 12px 11px;
+               background: var(--bg); border-bottom: var(--bw) solid var(--line-soft); }
+  .linkpanel.lin { padding-left: 34px; }
+  .linkgroup { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .linklabel { font-size: 11.5px; color: var(--ink-soft); flex: 0 0 auto; }
+  .linkchip { border: var(--bw) solid var(--line); background: var(--panel); color: var(--ink);
+              border-radius: var(--r-btn-sm); padding: 2px 9px; font: inherit; font-size: 12.5px; }
+  .linkchip:hover { border-color: var(--brand); color: var(--brand); }
+  .linkwhy { color: var(--ink-soft); font-size: 11.5px; }
+  .linkhint { font-size: 11.5px; color: var(--ink-soft); }
+
+  /* ---------- 길찾기 줄 ---------- */
+  .crumbs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 0 0 6px; line-height: 1.4; }
+  .crumb { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--ink-soft);
+           text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .crumb:hover { color: var(--brand); }
+  .crumb.here { text-decoration: none; color: var(--ink); font-weight: 700; cursor: default; }
+  .crumbsep { font-size: 12px; color: var(--ink-soft); opacity: .6; }
+
+  /* ---------- 모양 고르기 ---------- */
+  .themegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+  @media (max-width: 860px) { .themegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .themegrid { grid-template-columns: 1fr; } }
+  /* 「아이답게 → 정밀하게」 축. 목록 순서가 곧 이 축이라는 것을 한 줄로 알려 준다. */
+  .themeaxis { display: flex; align-items: center; gap: 9px; margin: 10px 0 2px;
+               font-size: 11.5px; color: var(--ink-soft); }
+  .themeaxis .axisline { flex: 1 1 auto; height: 2px; border-radius: 2px;
+                         background: linear-gradient(90deg, var(--t5), var(--t2)); }
+  .themecard { text-align: left; border: var(--bw) solid var(--line); background: var(--panel);
+               border-radius: var(--r-btn); padding: 10px; display: flex; flex-direction: column; gap: 7px;
+               color: var(--ink); font: inherit; }
+  .themecard.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .themecard .desc { margin: 0; }
+  .themename { display: flex; align-items: baseline; gap: 7px; }
+  .themename strong { font-size: 14.5px; }
+  .themename span { font-size: 12px; color: var(--ink-soft); }
+  /* 미리보기 조각 — 그 프리셋의 토큰을 그대로 쓴다. 따로 색을 적어 두지 않는다. */
+  .themeswatch { background: var(--bg); border-radius: 8px; padding: 10px; overflow: hidden; }
+  .themeswatch .minicard { position: relative; border: var(--bw) solid var(--line);
+                           background-color: var(--c-soft); background-image: linear-gradient(var(--veil), var(--veil));
+                           border-radius: var(--radius); box-shadow: var(--shadow);
+                           border-top: var(--accent-w) solid var(--c); 
+                           border-left-width: var(--accent-l); border-left-style: solid; border-left-color: var(--c);
+                           padding: var(--entry-pt) 10px 9px; display: flex; flex-direction: column; gap: 5px; }
+  .themeswatch .minicard::before {
+    content: ""; display: var(--stud); position: absolute; left: 10px; top: 6px; width: 50px; height: 9px;
+    background-image: radial-gradient(circle at 4.5px 4.5px, var(--c) 0 4px, transparent 4.5px);
+    background-size: 17px 9px; background-repeat: repeat-x; }
+  .themeswatch .minititle { font-family: var(--font-title); font-weight: 700; font-size: 13px; color: var(--ink);
+                            letter-spacing: var(--title-spacing); }
+  .themeswatch .miniline { height: 5px; border-radius: 3px; background: var(--line-soft); }
+  .themeswatch .miniline.short { width: 55%; }
+  .themeswatch .minirow { display: flex; gap: 4px; align-items: center; }
 
   /* ---------- 에디터 ---------- */
   .composer { padding: 18px; margin: 16px 0; }
@@ -113,7 +411,7 @@
   @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
 
   #blocks { margin-top: 4px; }
-  .block { border: 1px solid var(--line-soft); border-radius: 12px; background: var(--bg); margin-bottom: 8px; }
+  .block { border: var(--bw) solid var(--line-soft); border-radius: var(--r-block); background: var(--bg); margin-bottom: 8px; }
   .block:focus-within { border-color: var(--brand); }
   .bhead { display: flex; align-items: center; gap: 4px; padding: 5px 8px 3px; }
   .bkind { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); padding-left: 3px; }
@@ -168,26 +466,43 @@
   .tag.pick:hover { border-color: var(--brand); color: var(--brand); }
   .tag.pick.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
 
-  /* 기록마다 위쪽에 색 줄을 둬서 어디서 끊기는지 한눈에 보이게 한다 */
-  .entry { padding: 16px 18px; margin-bottom: 12px; border-top: 3px solid var(--brand); }
+  /* 기록마다 색 줄을 둬서 어디서 끊기는지 한눈에 보이게 한다.
+     색은 «유형 색»(--c) 이다. 프리셋이 여섯 자리를 정하고, 카드마다 제 자리 색을 물려받는다. */
+  .entry { position: relative; padding: var(--entry-pt) 18px 16px; margin-bottom: 12px;
+           background-color: var(--c-soft, var(--panel));
+           background-image: linear-gradient(var(--veil), var(--veil));
+           border-top: var(--accent-w) solid var(--c, var(--brand));
+           border-left-width: var(--accent-l); border-left-style: solid; border-left-color: var(--c, var(--brand)); }
+  /* 레고 돌기 — brick 프리셋에서만 나온다 (--stud: block).
+     따로 요소를 만들지 않는다. 요소를 만들면 프리셋마다 그리는 코드가 갈라진다. */
+  .entry::before {
+    content: ""; display: var(--stud); position: absolute; left: 17px; top: 8px;
+    width: var(--stud-w); height: var(--stud-h); pointer-events: none;
+    background-image: radial-gradient(circle at calc(var(--stud-h) / 2) calc(var(--stud-h) / 2),
+                      var(--c, var(--brand)) 0 calc(var(--stud-h) / 2 - .5px), transparent calc(var(--stud-h) / 2));
+    background-size: var(--stud-step) var(--stud-h); background-repeat: repeat-x;
+  }
   /* 유형 배지 바로 뒤에 제목이 붙고, 길면 그 자리에서 줄만 바뀐다 */
   .entry .head { display: block; }
   .entry .head .badge { display: inline; margin-right: 7px; white-space: nowrap; }
   .entry .head h3 { display: inline; font-size: 16.5px; line-height: 1.45; }
   .entry .head .when { display: block; margin-top: 6px; }
   /* 📌 맨 위 고정 */
-  .pinbtn { border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft);
-            font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  .pinbtn { border: var(--bw) solid var(--line); background: var(--panel); color: var(--ink-soft);
+            font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: var(--r-pill);
             margin-left: 8px; vertical-align: middle; white-space: nowrap; }
   .pinbtn:hover { border-color: var(--brand); color: var(--brand); }
-  .pinbtn.on { background: #fff4d6; border-color: var(--warn); color: var(--warn); }
-  @media (prefers-color-scheme: dark) { .pinbtn.on { background: #3a2f12; } }
-  .entry.pinned { border-top-color: var(--warn); }
-  .badge { font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); white-space: nowrap; }
-  .entry h3 { margin: 0; font-size: 16.5px; flex: 1 1 auto; min-width: 0; }
+  .pinbtn.on { background: var(--pin-bg); border-color: var(--warn); color: var(--warn); }
+
+  .entry.pinned { border-top-color: var(--warn); border-left-color: var(--warn); }
+  .badge { font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: var(--r-pill);
+           background: var(--c-soft, var(--brand-soft)); color: var(--c, var(--brand)); white-space: nowrap;
+           font-family: var(--font-title); }
+  .entry h3 { margin: 0; font-size: 16.5px; flex: 1 1 auto; min-width: 0;
+              font-family: var(--font-title); letter-spacing: var(--title-spacing); }
   .when { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
   .tags { margin: 7px 0 0; display: flex; gap: 5px; flex-wrap: wrap; }
-  .tag { font-size: 12px; color: var(--ink-soft); background: var(--bg); border: 1px solid var(--line); padding: 1px 8px; border-radius: 999px; }
+  .tag { font-size: 12px; color: var(--ink-soft); background: var(--bg); border: var(--bw) solid var(--line); padding: 1px 8px; border-radius: var(--r-pill); }
   .content { margin-top: 10px; }
   .content > * { margin: 0 0 8px; }
   .content p { white-space: pre-wrap; word-break: break-word; font-size: 14.3px; }
@@ -456,7 +771,8 @@
   .listview { padding: 4px; }
   .lrow { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 9px; }
   .lrow:hover { background: var(--bg); }
-  .lrow + .lrow { border-top: 1px solid var(--line-soft); }
+  /* 줄 사이 선 — 줄이 .lwrap 으로 한 겹 싸여 있어서 형제 선택자를 그에 맞춘다 */
+  .lwrap + .lwrap > .lrow { border-top: var(--bw) solid var(--line-soft); }
   .lico { flex: 0 0 auto; font-size: 15px; }
   .ltitle { flex: 1 1 auto; min-width: 0; text-align: left; border: none; background: transparent;
             color: var(--ink); font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -815,11 +1131,31 @@
     folderPattern: "{날짜}_{유형}_{제목}",
     materialsFolderName: "자료",
     viewMode: "stream",   // stream(나열) | grid(바둑판) | list(목록)
+    theme: "",           // 모양 프리셋. 빈 값이면 «아직 안 골랐다» — 첫 실행에 물어본다
+    maskGrain: 1,        // 모자이크 칸 크기 0 곱게 · 1 보통 · 2 굵게
     alsoGdoc: true,       // 구글 문서로도 저장 (드라이브에서 바로 읽기 좋음)
     alsoHtml: false,      // HTML 파일로도 저장
     useSubfolder: false,  // 구버전 설정 호환용
     subfolderName: "자료"
   };
+  /* 프리셋은 «아이 → 정밀» 한 축 위에 놓는다. 목록 순서가 곧 그 축이다.
+     font 은 구글 글꼴에서 받아 올 이름 — 없으면 기기에 있는 글꼴을 쓴다. */
+  var THEMES = [
+    { key: "play",  label: "블록놀이", sub: "가장 아이답게", tone: 1, font: "Jua",
+      desc: "굵은 테두리와 큰 돌기, 원색 브릭. 저학년 아이와 함께 볼 화면이라면 이쪽입니다." },
+    { key: "memo",  label: "메모지",   sub: "손으로 쓴 쪽지", tone: 2, font: "Gaegu:wght@400;700",
+      desc: "기록 한 편이 색색의 메모지 한 장. 테두리가 손으로 그린 듯 삐뚤합니다. 가장 따뜻합니다." },
+    { key: "brick", label: "블록",     sub: "쌓아 올리는 조각", tone: 3, font: "Gaegu:wght@400;700",
+      desc: "기록 한 편이 브릭 한 조각. 위에 돌기가 있습니다. 글·사진·파일을 «블록»이라 부르는 이 앱과 말이 맞습니다." },
+    { key: "note",  label: "공책",     sub: "한 권에 이어 적기", tone: 4, font: "Gaegu:wght@400;700",
+      desc: "줄이 촘촘한 속지. 왼쪽에 유형 색줄이 섭니다. 기록이 많을수록 이 갈래가 편합니다." },
+    { key: "base",  label: "기본",     sub: "지금 그대로", tone: 5, font: "",
+      desc: "차분한 파랑과 흰 종이. 업무용 화면에 익숙한 사람에게 편합니다." },
+    { key: "paper", label: "문서",     sub: "인쇄물처럼", tone: 6, font: "Gowun+Batang",
+      desc: "명조 글꼴에 얇은 선. 긴 글을 오래 읽기에 가장 좋습니다. 연수 자료를 뽑아 쓰는 분께." },
+    { key: "draft", label: "설계도",   sub: "가장 정밀하게", tone: 7, font: "IBM+Plex+Sans+KR:wght@400;500;600",
+      desc: "모서리를 깎지 않고, 선을 머리카락만큼 얇게. 군더더기 없이 빽빽하게 봅니다." }
+  ];
   var FOLDER_MODES = [
     { key: "perEntry", label: "기록마다 폴더 하나", desc: "2026-08-16_경험_수업회고/ 안에 .md 와 자료를 함께" },
     { key: "materials", label: "글과 자료를 분리", desc: ".md 는 맨 위, 사진·파일은 자료/ 폴더에" },
@@ -997,6 +1333,7 @@
   var currentType = settings.types[0] ? settings.types[0].key : "";
   var filterType = "all";
   var filterTags = [];      // 태그로 좁혀 보기 (여러 개 고르면 모두 가진 기록만)
+  var filterPath = [];      // 폴더 길로 좁혀 보기 — 길찾기 줄을 누르면 그 아래만 남는다
   var filterPinned = false; // 📌 고정한 것만 보기
   var searchQ = "";
   var expanded = {};
@@ -1025,6 +1362,8 @@
       if (s.subfolderName) out.materialsFolderName = s.subfolderName;
     }
     if (VIEW_MODES.some(function (v) { return v.key === s.viewMode; })) out.viewMode = s.viewMode;
+    if (typeof s.theme === "string" && (s.theme === "" || THEMES.some(function (t) { return t.key === s.theme; }))) out.theme = s.theme;
+    if (typeof s.maskGrain === "number" && s.maskGrain >= 0 && s.maskGrain <= 2) out.maskGrain = s.maskGrain | 0;
     if (typeof s.alsoGdoc === "boolean") out.alsoGdoc = s.alsoGdoc;
     if (typeof s.alsoHtml === "boolean") out.alsoHtml = s.alsoHtml;
     return out;
@@ -1032,6 +1371,297 @@
   function typeOf(key) {
     for (var i = 0; i < settings.types.length; i++) if (settings.types[i].key === key) return settings.types[i];
     return { key: key || "", label: "미분류", icon: "🏷️" };
+  }
+
+  /* =========================================================
+     모양(프리셋)
+     화면 CSS 는 하나뿐이고, 프리셋은 «토큰 값»만 바꾼다.
+     그래서 기능을 새로 만들어도 프리셋은 저절로 따라온다.
+     ========================================================= */
+  function themeOf(key) {
+    for (var i = 0; i < THEMES.length; i++) if (THEMES[i].key === key) return THEMES[i];
+    return THEMES[0];
+  }
+  /* 손글씨 글꼴은 «필요할 때만» 받아 온다.
+     기본 프리셋을 쓰는 사람에게까지 글꼴을 받게 하면 첫 화면이 그만큼 늦어진다. */
+  var loadedFonts = {};
+  function ensureThemeFont(key) {
+    var t = themeOf(key);
+    if (!t.font || loadedFonts[t.font]) return;
+    loadedFonts[t.font] = 1;
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=" + t.font + "&display=swap";
+    document.head.appendChild(link);
+  }
+  // 고르는 화면에서는 일곱 갈래를 한눈에 보여 줘야 해서 글꼴을 다 받아 온다
+  function ensureAllThemeFonts() { THEMES.forEach(function (t) { ensureThemeFont(t.key); }); }
+  function applyTheme(key) {
+    var t = themeOf(key);
+    if (t.key === "base") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t.key);
+    ensureThemeFont(t.key);
+    // 폰 주소창 색까지 맞춰 준다. 안 맞추면 앱 위쪽에 딴 색 띠가 남는다.
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.content = getComputedStyle(document.documentElement).getPropertyValue("--panel").trim() || "#ffffff";
+    }
+  }
+  /* 유형마다 색 한 자리. 유형은 사용자가 더 만들 수 있어서 여섯 자리를 차례로 돌려 쓴다.
+     ⚠️ 색을 유형 «키» 로 정하면 안 된다 — 사용자가 만든 유형에는 색이 없어진다. */
+  function typeVars(key) {
+    var i = 0;
+    for (var n = 0; n < settings.types.length; n++) if (settings.types[n].key === key) { i = n; break; }
+    var slot = (i % 6) + 1;
+    return "--c: var(--t" + slot + "); --c-soft: var(--t" + slot + "s);";
+  }
+  function paintType(node, key) {
+    if (node) node.style.cssText += ";" + typeVars(key);
+    return node;
+  }
+
+  /* =========================================================
+     길찾기 줄 (breadcrumb) — 이 기록이 «어디에» 있는지
+       내 폴더 › 2019 › 3학년 › 과학
+     폴더를 훑어 가져온 기록은 거쳐 온 길을 srcPath 에 들고 있다.
+     앱이 직접 만든 기록은 제 폴더 이름 한 칸만 있다.
+     칸을 누르면 그 아래에 있는 기록만 남는다.
+     ========================================================= */
+  function crumbsOf(n) {
+    var path = (n.srcPath || []).slice();
+    if (!path.length && n.folderName) path = [n.folderName];
+    return path;
+  }
+  function buildCrumbs(n, opt) {
+    var path = crumbsOf(n);
+    var root = folder.name || "내 폴더";
+    var wrap = el("nav", "crumbs");
+    wrap.setAttribute("aria-label", "이 기록이 있는 곳");
+
+    function crumb(label, depth) {
+      var b = el("button", "crumb", label);
+      b.type = "button";
+      b.title = depth < 0 ? "모든 기록 보기" : (path.slice(0, depth + 1).join(" / ") + " 아래만 보기");
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        filterPath = depth < 0 ? [] : path.slice(0, depth + 1);
+        render();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      wrap.appendChild(b);
+    }
+    function sep() { wrap.appendChild(el("span", "crumbsep", "›")); }
+
+    crumb(root, -1);
+    path.forEach(function (name, i) { sep(); crumb(name, i); });
+    // 마지막 칸은 기록 자신 — 누를 곳이 아니라 «지금 여기» 표시다
+    if (opt && opt.self) { sep(); wrap.appendChild(el("span", "crumb here", n.title || "(제목 없음)")); }
+    return wrap;
+  }
+  /* 폴더 그림 조각들. 아이콘은 그림글자(이모지) 대신 그려 쓴다 — 기기마다 모양이 달라지지 않는다. */
+  function fileIconSvg(kind) {
+    var ns = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("width", "15"); svg.setAttribute("height", "15");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke-width", "1.9"); svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round"); svg.setAttribute("aria-hidden", "true");
+    var d = {
+      folder: ["M3 7.5 3 19 21 19 21 9 12 9 10 6.5 4.5 6.5Z"],
+      md:     ["M14 3 6 3 6 21 18 21 18 7Z", "M14 3 14 7 18 7", "M9 12 15 12", "M9 16 13 16"],
+      img:    ["M4 5 20 5 20 19 4 19Z", "M4 15.5 9 11 13 15 16 12.5 20 16"],
+      link:   ["M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.3 1.3",
+               "M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.3-1.3"]
+    }[kind] || ["M14 3 6 3 6 21 18 21 18 7Z", "M14 3 14 7 18 7"];
+    svg.setAttribute("stroke", kind === "folder" ? "var(--c, var(--brand))" : "currentColor");
+    if (kind === "folder") svg.setAttribute("fill", "var(--brand-soft)");
+    d.forEach(function (p) {
+      var path = document.createElementNS(ns, "path");
+      path.setAttribute("d", p);
+      svg.appendChild(path);
+    });
+    return svg;
+  }
+  /* 정리 방식마다 «이렇게 쌓입니다» 를 그림으로 보여 준다.
+     depth 는 들여쓰기 칸수, kind 는 아이콘, note 는 오른쪽에 붙는 설명. */
+  var FOLDER_SAMPLES = {
+    perEntry: [
+      [0, "folder", "내 폴더", ""],
+      [1, "folder", "2026-08-16_경험_수업회고", ""],
+      [2, "md", "2026-08-16_경험_수업회고.md", ""],
+      [2, "img", "2026-08-16_수업회고_01.png", ""]
+    ],
+    materials: [
+      [0, "folder", "내 폴더", ""],
+      [1, "md", "2026-08-16_경험_수업회고.md", ""],
+      [1, "folder", "자료", ""],
+      [2, "img", "2026-08-16_수업회고_01.png", ""]
+    ],
+    monthly: [
+      [0, "folder", "내 폴더", ""],
+      [1, "folder", "2026-08", ""],
+      [2, "md", "2026-08-16_경험_수업회고.md", ""],
+      [2, "img", "2026-08-16_수업회고_01.png", ""]
+    ],
+    tag: [
+      [0, "folder", "내 폴더", ""],
+      [1, "folder", "수업설계", "진짜 자리"],
+      [2, "md", "2026-08-16_경험_수업회고.md", ""],
+      [2, "img", "2026-08-16_수업회고_01.png", ""],
+      [1, "folder", "3학년", ""],
+      [2, "link", "2026-08-16_경험_수업회고.md", "표지판"]
+    ],
+    flat: [
+      [0, "folder", "내 폴더", ""],
+      [1, "md", "2026-08-16_경험_수업회고.md", ""],
+      [1, "img", "2026-08-16_수업회고_01.png", ""]
+    ]
+  };
+  /* =========================================================
+     폴더 찾아보기 — 탐색기처럼 눌러 들어가며 고른다
+     드라이브 링크를 붙여넣는 길은 «주소를 아는 사람» 에게만 쉽다.
+     ⚠️ 로그인(accessToken)이 있어야 폴더 목록을 물어볼 수 있다.
+     ========================================================= */
+  function listFolders(parentId) {
+    var q = "'" + parentId + "' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false";
+    return driveJson("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
+      "&fields=files(id,name,mimeType)&orderBy=name&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true")
+      .then(function (j) {
+        /* 물음에 이미 «폴더만» 을 걸어 두었지만, 여기서 한 번 더 거른다.
+           탐색기에 파일이 섞여 나오면 «눌러도 안 열리는 줄» 이 생겨서 고장 난 것처럼 보인다. */
+        return (j.files || []).filter(function (k) {
+          return k.mimeType === "application/vnd.google-apps.folder";
+        });
+      });
+  }
+  function openFolderBrowser(onPick) {
+    if (!accessToken) { toast("먼저 구글에 로그인해 주세요."); return; }
+    closeModal();
+    var path = [{ id: "root", name: "내 드라이브" }];   // 지나온 길. 마지막이 지금 보고 있는 곳
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "520px";
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "📂 폴더 고르기"));
+    head.appendChild(el("span", "spacer"));
+    var x = el("button", "btn sm ghost", "✕");
+    x.addEventListener("click", closeModal);
+    head.appendChild(x);
+    m.appendChild(head);
+
+    var body = el("div", "mbody");
+    var crumbBar = el("nav", "crumbs");
+    var listBox = el("div", "picklist");
+    var note = el("p", "desc", "폴더를 눌러 안으로 들어갑니다. 기록장이 쓸 폴더에서 «여기로 정하기» 를 누르세요.");
+    body.appendChild(crumbBar); body.appendChild(note); body.appendChild(listBox);
+    m.appendChild(body);
+
+    var foot = el("div", "mfoot");
+    var newBtn = el("button", "btn sm", "＋ 여기에 새 폴더");
+    foot.appendChild(newBtn);
+    foot.appendChild(el("span", "spacer"));
+    var cancel = el("button", "btn ghost", "취소");
+    cancel.addEventListener("click", closeModal);
+    var take = el("button", "btn primary", "여기로 정하기");
+    foot.appendChild(cancel); foot.appendChild(take);
+    m.appendChild(foot);
+
+    function here() { return path[path.length - 1]; }
+    function drawCrumbs() {
+      crumbBar.innerHTML = "";
+      path.forEach(function (p, i) {
+        if (i) crumbBar.appendChild(el("span", "crumbsep", "›"));
+        var b = el("button", "crumb" + (i === path.length - 1 ? " here" : ""), p.name);
+        b.type = "button";
+        if (i < path.length - 1) b.addEventListener("click", function () { path = path.slice(0, i + 1); load(); });
+        crumbBar.appendChild(b);
+      });
+    }
+    function load() {
+      drawCrumbs();
+      listBox.innerHTML = "";
+      listBox.appendChild(el("p", "desc", "여는 중…"));
+      take.disabled = true;
+      listFolders(here().id).then(function (kids) {
+        listBox.innerHTML = "";
+        take.disabled = false;
+        if (!kids.length) {
+          listBox.appendChild(el("p", "desc", "이 안에는 폴더가 없습니다. 여기로 정하거나, 새 폴더를 만드세요."));
+          return;
+        }
+        kids.forEach(function (k) {
+          var row = el("button", "pickrow");
+          row.type = "button";
+          row.appendChild(fileIconSvg("folder"));
+          row.appendChild(el("span", "fname", k.name));
+          row.appendChild(el("span", "spacer"));
+          row.appendChild(el("span", "crumbsep", "›"));
+          row.addEventListener("click", function () { path.push({ id: k.id, name: k.name }); load(); });
+          listBox.appendChild(row);
+        });
+      }).catch(function (e) {
+        listBox.innerHTML = "";
+        listBox.appendChild(el("p", "desc", "폴더를 못 읽었습니다: " + errText(e)));
+        take.disabled = false;
+      });
+    }
+    newBtn.addEventListener("click", function () {
+      var name = window.prompt("새 폴더 이름", "교직 기록");
+      if (!name || !name.trim()) return;
+      newBtn.disabled = true;
+      createFolder(safeName(name, 60), here().id)
+        .then(function (f) { path.push({ id: f.id, name: f.name }); newBtn.disabled = false; load(); })
+        .catch(function (e) { newBtn.disabled = false; toast("폴더를 못 만들었습니다: " + errText(e)); });
+    });
+    take.addEventListener("click", function () {
+      var h = here();
+      // 「내 드라이브」 통째로는 못 고르게 한다. 십삼 년치가 든 뿌리에 기록장 파일을 흩뿌리게 된다.
+      if (h.id === "root") { toast("드라이브 맨 위 말고, 안쪽 폴더를 하나 고르거나 새로 만들어 주세요."); return; }
+      closeModal();
+      onPick(h);
+    });
+    bg.appendChild(m);
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+    $("modalHost").appendChild(bg);
+    modalEl = bg;
+    load();
+  }
+
+  function folderTree(mode) {
+    var box = el("div", "ftree");
+    (FOLDER_SAMPLES[mode] || []).forEach(function (row) {
+      var line = el("div", "frow");
+      line.style.paddingLeft = (row[0] * 16) + "px";
+      line.appendChild(fileIconSvg(row[1]));
+      line.appendChild(el("span", "fname", row[2] + (row[1] === "folder" ? "/" : "")));
+      if (row[3]) line.appendChild(el("span", "fnote", "← " + row[3]));
+      box.appendChild(line);
+    });
+    return box;
+  }
+
+  /* 프리셋 미리보기 조각.
+     ⚠️ 여기에 색을 손으로 적지 마세요. 안쪽에 data-theme 을 걸어 «그 프리셋의 토큰» 을 그대로 쓰게 합니다.
+        그래야 프리셋 값을 고쳤을 때 미리보기가 저절로 따라옵니다. */
+  function themeAxis() {
+    var ax = el("div", "themeaxis");
+    ax.appendChild(el("span", null, "아이답게"));
+    ax.appendChild(el("span", "axisline"));
+    ax.appendChild(el("span", null, "정밀하게"));
+    return ax;
+  }
+  function themeSwatch(key) {
+    var box = el("div", "themeswatch");
+    if (key !== "base") box.setAttribute("data-theme", key);
+    var mini = el("div", "minicard");
+    mini.style.cssText += ";--c: var(--t1); --c-soft: var(--t1s);";
+    var row = el("div", "minirow");
+    row.appendChild(el("span", "badge", "경험"));
+    row.appendChild(el("span", "minititle", "수업 회고"));
+    mini.appendChild(row);
+    mini.appendChild(el("div", "miniline"));
+    mini.appendChild(el("div", "miniline short"));
+    box.appendChild(mini);
+    return box;
   }
   function saveSettingsLocal() { localStorage.setItem(LS.settings, JSON.stringify(settings)); }
 
@@ -1841,6 +2471,81 @@
     _linkCache = { byTitle: byTitle, out: out, back: back };
     return _linkCache;
   }
+  /* 목록 보기에서 이 기록이 놓일 «폴더 이름».
+     정리 방식이 정하는 그대로다 — 드라이브에 실제로 만들어지는 폴더와 같은 이름이어야
+     화면과 드라이브가 어긋나지 않는다. */
+  var listOpen = {};          // 목록 보기에서 접은 폴더
+  var linkOpen = {};          // 목록 보기에서 «연결» 을 펼쳐 둔 기록
+  function listFolderOf(n) {
+    var mode = settings.folderMode;
+    if (mode === "perEntry") return entryFolderName(n);
+    if (mode === "materials") return "";                       // 글은 맨 위에 놓인다
+    if (mode === "monthly") return dateStamp(n.createdAt).slice(0, 7);
+    if (mode === "tag") return primaryTagFolder(n);
+    return "";                                                 // flat
+  }
+
+  /* 목록 한 줄. 연결(🔗)을 눌러 «누구와 이어져 있는지» 그 자리에서 펼쳐 본다.
+     잇는 것은 여전히 편집·관계망에서 하고, 여기서는 «보기» 만 한다. */
+  function listRow(n, indented) {
+    var t = typeOf(n.type);
+    var wrap = el("div", "lwrap");
+    var row = el("div", "lrow" + (indented ? " lin" : ""));
+    row.setAttribute("data-eid", n.id);
+    row.appendChild(el("span", "lico", t.icon));
+    var ttl = el("button", "ltitle", n.title || "(제목 없음)");
+    ttl.addEventListener("click", function () {
+      settings.viewMode = "stream"; saveSettingsLocal(); expanded[n.id] = true; render(); gotoEntry(n.id);
+    });
+    row.appendChild(ttl);
+
+    var outs = outLinks(n).filter(function (l) { return l.to; });
+    var ins = backLinks(n);
+    if (outs.length || ins.length) {
+      var lk = el("button", "lmeta linkbtn" + (linkOpen[n.id] ? " on" : ""), "🔗 " + outs.length + "/" + ins.length);
+      lk.type = "button";
+      lk.title = "이어진 기록 보기 (나가는 " + outs.length + " · 들어오는 " + ins.length + ")";
+      lk.addEventListener("click", function () { linkOpen[n.id] = !linkOpen[n.id]; render(); });
+      row.appendChild(lk);
+    }
+    var att = (n.blocks || []).filter(function (b) { return b.kind === "image" || b.kind === "file"; }).length;
+    if (att) row.appendChild(el("span", "lmeta", "📎 " + att));
+    row.appendChild(el("span", "lwhen", formatDate(n.createdAt).slice(0, 10)));
+    var bd = el("button", "btn xs danger", "✕");
+    bd.addEventListener("click", function () { removeEntry(n.id); });
+    row.appendChild(bd);
+    wrap.appendChild(row);
+
+    if (linkOpen[n.id]) {
+      var panel = el("div", "linkpanel" + (indented ? " lin" : ""));
+      /* ⚠️ 두 목록의 «생김새가 다르다».
+         outLinks 는 { to, label } 이고, backLinks 는 { entry, label } 이다.
+         한 가지로 뭉뚱그리면 들어오는 연결이 통째로 안 보인다. */
+      function side(label, items, isBack) {
+        if (!items.length) return;
+        var g = el("div", "linkgroup");
+        g.appendChild(el("span", "linklabel", label));
+        items.forEach(function (l) {
+          var to = isBack ? l.entry : entries.filter(function (e) { return e.id === l.to; })[0];
+          if (!to) return;
+          var b = el("button", "linkchip", (typeOf(to.type).icon || "") + " " + (to.title || "(제목 없음)"));
+          b.type = "button";
+          if (l.label) b.appendChild(el("span", "linkwhy", " · " + l.label));
+          b.addEventListener("click", function () {
+            settings.viewMode = "stream"; saveSettingsLocal(); expanded[to.id] = true; render(); gotoEntry(to.id);
+          });
+          g.appendChild(b);
+        });
+        panel.appendChild(g);
+      }
+      side("이 기록이 가리키는 것", outs, false);
+      side("이 기록을 가리키는 것", ins, true);
+      panel.appendChild(el("span", "linkhint", "잇거나 끊는 것은 «편집» 또는 «관계망» 에서 합니다."));
+      wrap.appendChild(panel);
+    }
+    return wrap;
+  }
+
   function outLinks(n) { return linkData().out[n.id] || []; }
   function backLinks(n) {
     var list = linkData().back[n.id] || [];
@@ -1878,7 +2583,7 @@
   function gotoEntry(id) {
     closeModal();
     if (filterType !== "all" || searchQ || filterTags.length) {
-      filterType = "all"; searchQ = ""; filterTags = []; $("search").value = ""; render();
+      filterType = "all"; searchQ = ""; filterTags = []; filterPath = []; $("search").value = ""; render();
     }
     expanded[id] = true;
     render();
@@ -1944,6 +2649,106 @@
      구글 문서에 «링크가 있는 사람 = 읽기» 권한을 얹고 그 주소를 준다.
      ⚠️ HTML 파일로는 안 된다. 드라이브는 2016년에 웹페이지로 열어주는 기능을 없앴다.
         .md 도 글자만 보이는 화면이라, 사람에게 보내는 것은 구글 문서가 맞다. */
+  /* 구글 문서를 «웹에 게시» / «게시 끄기».
+     문서의 판(revision)에 published 를 켜는 것이라, 편집 화면이 아니라 읽는 쪽(/pub)이 열린다.
+     publishAuto 를 켜야 나중에 고친 것이 게시된 쪽에도 따라간다. */
+  function publishDocToWeb(docId) {
+    return driveJson("https://www.googleapis.com/drive/v3/files/" + docId + "/revisions/head?fields=id", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ published: true, publishAuto: true, publishedOutsideDomain: true })
+    });
+  }
+  function unpublishDoc(docId) {
+    if (!docId) return Promise.resolve();
+    return driveJson("https://www.googleapis.com/drive/v3/files/" + docId + "/revisions/head?fields=id", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ published: false, publishAuto: false, publishedOutsideDomain: false })
+    });
+    /* ⚠️ 여기서 오류를 삼키면 안 된다.
+       못 껐는데 «껐습니다. 이제 링크로는 열리지 않습니다» 라고 말하게 된다.
+       공개 여부는 사람이 남에게 약속하는 것이라, 틀리게 말하는 쪽이 훨씬 나쁘다. */
+  }
+
+  /* =========================================================
+     🌐 웹 쪽으로 공유 — 사진·영상·녹음까지 한 쪽에
+
+     왜 이렇게 하나:
+       · 드라이브는 2016년부터 .html 을 «웹페이지» 로 안 열어 준다 (내려받기 화면만 뜬다)
+       · 구글 문서(/pub)는 사진은 실어도 «영상·녹음» 은 못 싣는다
+     그래서 읽는 쪽(view.html)을 이 앱과 같은 자리에 두고,
+       · 글·제목·태그는 «주소 뒤(#)» 에 눌러 담아 보내고
+       · 사진·영상·녹음은 드라이브에서 바로 불러오게 한다
+     서버도, 새 열쇠(API 키)도 필요 없다.
+
+     ⚠️ 이 길은 딸린 파일 하나하나를 «링크가 있는 사람 = 읽기» 로 엽니다.
+        그래서 공유 창의 «사진 확인 관문» 을 반드시 지나야 합니다.
+     ========================================================= */
+  function bytesToB64url(bytes) {
+    var bin = "", CH = 0x8000;
+    for (var i = 0; i < bytes.length; i += CH) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    }
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  /* ⚠️ view.html 의 decodePacket() 과 «짝» 이다. 한쪽을 고치면 다른 쪽도 고쳐야 한다.
+     맨 앞 한 글자가 표시 — "1" 은 눌러 담은 것, "0" 은 그냥 담은 것. */
+  function encodePacket(obj) {
+    var bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (typeof CompressionStream === "undefined") {
+      return Promise.resolve("0" + bytesToB64url(bytes));
+    }
+    var cs = new CompressionStream("gzip");
+    var w = cs.writable.getWriter();
+    // 돌려주는 약속을 그냥 두면 «아무도 안 받은 거부» 가 되어 콘솔에 오류로 남는다
+    var hush = function () {};
+    w.write(bytes).catch(hush);
+    w.close().catch(hush);
+    return new Response(cs.readable).arrayBuffer().then(function (buf) {
+      return "1" + bytesToB64url(new Uint8Array(buf));
+    });
+  }
+  // 이 기록에서 «남에게 열어 줘야 하는» 드라이브 파일들
+  function sharedFileIds(n) {
+    var ids = [];
+    (n.blocks || []).forEach(function (b) {
+      if ((b.kind === "image" || b.kind === "file") && b.fileId && ids.indexOf(b.fileId) < 0) ids.push(b.fileId);
+    });
+    return ids;
+  }
+  function buildSharePacket(n) {
+    var p = {
+      v: 1,
+      t: n.title || "",
+      d: n.createdAt || Date.now(),
+      g: (n.tags || []).slice(0, 12),
+      th: settings.theme || "base",
+      b: []
+    };
+    (n.blocks || []).forEach(function (b) {
+      if (b.kind === "text" || b.kind === "heading" || b.kind === "quote") {
+        if (b.text && b.text.trim()) p.b.push({ k: b.kind, x: b.text });
+      } else if (b.kind === "divider") {
+        p.b.push({ k: "divider" });
+      } else if (b.kind === "link") {
+        if (b.url) p.b.push({ k: "link", u: b.url, l: b.label || "" });
+      } else if (b.kind === "image" && b.fileId) {
+        p.b.push({ k: "image", f: b.fileId, c: b.caption || "", n: b.name || b.original || "" });
+      } else if (b.kind === "file" && b.fileId) {
+        // 영상·녹음은 재생기로, 그 밖의 파일은 내려받는 줄로
+        var kind = isVideo(b) ? "video" : (isAudio(b) ? "audio" : "file");
+        p.b.push({ k: kind, f: b.fileId, c: b.caption || "", n: b.name || b.original || "", s: b.size || 0 });
+      }
+      /* embed(코드 삽입)는 일부러 뺀다 — 남의 쪽에 남의 코드를 실어 보내지 않는다 */
+    });
+    return p;
+  }
+  function webPageUrl(n) {
+    return encodePacket(buildSharePacket(n)).then(function (enc) {
+      var base = location.origin + location.pathname.replace(/[^/]*$/, "") + "view.html";
+      return base + "#d=" + enc;
+    });
+  }
+
   function shareToAnyone(fileId) {
     return driveJson("https://www.googleapis.com/drive/v3/files/" + fileId +
       "/permissions?supportsAllDrives=true&fields=id", {
@@ -2221,8 +3026,12 @@
       docId: n.docId || null, htmlId: n.htmlId || null,
       srcId: n.srcId || null,          // 폴더에서 끌어온 것이라면, 그 원본 파일 ID
       srcFolderId: n.srcFolderId || null, srcFolderName: n.srcFolderName || null,
+      srcPath: (n.srcPath || []).slice(),
       folderId: n.folderId || null, folderName: n.folderName || null,
       shareUrl: n.shareUrl || null,
+      sharePubUrl: n.sharePubUrl || null,
+      shareWebUrl: n.shareWebUrl || null,
+      shareWebAt: n.shareWebAt || null, shareWebTheme: n.shareWebTheme || null,
       shareFolderUrl: n.shareFolderUrl || null
     };
   }
@@ -3128,7 +3937,19 @@
     warn.textContent = "⚠️ 이 창을 열어 둔 동안에만 녹음됩니다. 다른 앱으로 넘어가거나 화면이 꺼지면 멈춥니다.";
     body.appendChild(warn);
 
+    /* 제목과 내용을 갈라 놓는다.
+       제목은 «파일 이름» 이 되고, 받아 적은 글은 «본문» 이 된다. 둘을 섞으면 파일명이 문장이 된다. */
+    var titleField = el("div", "field");
+    titleField.style.textAlign = "left";   // 시계 때문에 창이 가운데 정렬이라, 적는 칸은 되돌려 놓는다
+    titleField.appendChild(el("label", null, "제목 — 파일 이름이 됩니다"));
+    var tin = el("input", "inp");
+    tin.placeholder = "예: 8월 협의회 · 비워 두면 날짜·시각으로 저장됩니다";
+    titleField.appendChild(tin);
+    titleField.appendChild(el("p", "desc", "말한 내용은 아래 칸에 그대로 담깁니다. 제목까지 말로 채우지 않습니다."));
+    body.appendChild(titleField);
+
     var scriptField = el("div", "field");
+    scriptField.style.textAlign = "left";
     scriptField.appendChild(el("label", null, "받아 적은 글 — 고쳐도 됩니다"));
     var ta = el("textarea", "inp");
     ta.rows = 7;
@@ -3305,7 +4126,11 @@
           mime: audioBlob.type || "audio/webm",
           size: audioBlob.size,
           blob: audioBlob,
-          caption: text ? text.slice(0, 60) : ""
+          /* ⚠️ 받아 적은 글을 여기(자료 제목)에 넣으면 안 된다.
+             자료 제목은 «파일 이름» 에 그대로 들어가서, 말한 문장이 통째로 파일명이 된다.
+             («2026-08-21_부기_협의회_아직 교사가 안 다듬어져서 요거 다듬어지고…_02.webm»)
+             제목은 사람이 짧게 적는 것이고, 말한 내용은 아래 글 블록이 맡는다. */
+          caption: safeName(tin.value, 40)
         }));
       }
       if (text) made.push(newBlock("text", { text: text }));
@@ -3315,6 +4140,7 @@
       stopAll();
       closeModal();
       toast("녹음" + (text ? "과 받아 적은 글" : "") + "을 넣었습니다.");
+      if (audioBlob && !tin.value.trim()) toast2("녹음 블록 아래 «제목» 칸에 적으면 파일 이름이 됩니다.");
       var last = $("blocks").lastElementChild;
       if (last) last.scrollIntoView({ behavior: "smooth", block: "center" });
     }
@@ -3511,9 +4337,23 @@
      찍은 자리를 «목록» 으로만 들고 있다가 매번 원본에서 다시 그린다.
      그래서 되돌리기가 공짜고, 여러 번 찍어도 화질이 상하지 않는다. */
 
+  /* 모자이크 «칸» 크기.
+     div 가 클수록 칸이 잘아진다(곱다). 곱게 갈수록 보기에 곱지만,
+     너무 고우면 원래 얼굴이 되살아 보이므로 사람이 고르게 둔다. */
+  var GRAINS = [
+    { label: "곱게", div: 11, min: 3 },
+    { label: "보통", div: 7,  min: 4 },
+    { label: "굵게", div: 4,  min: 6 }
+  ];
+  function grainOf() {
+    var i = settings.maskGrain;
+    return GRAINS[(typeof i === "number" && GRAINS[i]) ? i : 1];
+  }
+
   // 원 하나를 뭉갠다. 원 밖은 건드리지 않는다.
   function pixelateCircle(ctx, src, cx, cy, r) {
-    var cell = Math.max(5, Math.round(r / 4));      // 원 지름에 8칸쯤
+    var g = grainOf();
+    var cell = Math.max(g.min, Math.round(r / g.div));
     /* ⚠️ 네모를 «잘라내야» 한다. 왼쪽·위쪽으로 넘칠 때 시작점만 0 으로 밀면
        엉뚱한 자리의 그림을 떠다가 원 안에 붙이게 된다 (가장자리 얼굴이 안 지워진다). */
     var x = Math.max(0, Math.floor(cx - r)), y = Math.max(0, Math.floor(cy - r));
@@ -3598,6 +4438,29 @@
       return b;
     });
     body.appendChild(sizeBar);
+
+    // ②-2 칸 굵기 고르기 — 「픽셀이 너무 크다」는 말을 이 자리에서 풀 수 있게
+    var grainBar = el("div", "modebar grainbar");
+    grainBar.appendChild(el("span", "crophint", "칸 굵기"));
+    var grainBtns = GRAINS.map(function (g, i) {
+      var b = el("button", "btn sm", g.label);
+      b.addEventListener("click", function () {
+        settings.maskGrain = i;
+        saveSettingsLocal();
+        if (connected) saveSettingsRemote();
+        syncGrain();
+        redraw();          // 이미 찍어 둔 것도 새 굵기로 다시 그린다
+      });
+      grainBar.appendChild(b);
+      return b;
+    });
+    function syncGrain() {
+      grainBtns.forEach(function (b, i) {
+        b.className = "btn sm" + ((settings.maskGrain === i || (settings.maskGrain == null && i === 1)) ? " primary" : "");
+      });
+    }
+    syncGrain();
+    body.appendChild(grainBar);
 
     // ③ 지금 고른 사진
     var stage = el("div", "maskstage");
@@ -4527,7 +5390,7 @@
     var host = $("typeChips");
     host.innerHTML = "";
     settings.types.forEach(function (t) {
-      var b = el("button", "chip" + (t.key === currentType ? " on" : ""), t.icon + " " + t.label);
+      var b = paintType(el("button", "chip" + (t.key === currentType ? " on" : ""), t.icon + " " + t.label), t.key);
       b.type = "button";
       b.addEventListener("click", function () { currentType = t.key; renderTypeChips(); renderBlocks(); });
       host.appendChild(b);
@@ -4558,7 +5421,7 @@
     settings.types.forEach(function (t) {
       var c = entries.filter(function (n) { return n.type === t.key; }).length;
       if (!c && filterType !== t.key) return;
-      var b = el("button", "chip" + (filterType === t.key ? " on" : ""), t.icon + " " + t.label + " " + c);
+      var b = paintType(el("button", "chip" + (filterType === t.key ? " on" : ""), t.icon + " " + t.label + " " + c), t.key);
       b.type = "button";
       b.addEventListener("click", function () { filterType = t.key; render(); });
       host.appendChild(b);
@@ -4612,11 +5475,19 @@
       host.appendChild(more);
     }
 
-    if (filterTags.length || filterType !== "all" || searchQ || filterPinned) {
+    // 지금 어느 폴더 아래를 보고 있는지 눈에 보여야 한다. 안 보이면 «기록이 없어졌다» 고 여긴다.
+    if (filterPath.length) {
+      var pc = el("button", "chip on", "📁 " + filterPath.join(" / ") + " 아래");
+      pc.type = "button";
+      pc.title = "이 폴더로 좁혀 보는 것을 풉니다";
+      pc.addEventListener("click", function () { filterPath = []; render(); });
+      host.appendChild(pc);
+    }
+    if (filterTags.length || filterType !== "all" || searchQ || filterPinned || filterPath.length) {
       var clear = el("button", "chip clearchip", "✕ 필터 지우기");
       clear.type = "button";
       clear.addEventListener("click", function () {
-        filterTags = []; filterType = "all"; searchQ = ""; filterPinned = false; $("search").value = "";
+        filterTags = []; filterType = "all"; searchQ = ""; filterPinned = false; filterPath = []; $("search").value = "";
         render();
       });
       host.appendChild(clear);
@@ -4631,6 +5502,12 @@
   function matches(n) {
     if (filterPinned && !n.pinned) return false;
     if (filterType !== "all" && n.type !== filterType) return false;
+    // 폴더 길은 «앞에서부터» 같아야 한다. 2019/3학년 을 고르면 2019/4학년 은 빠진다.
+    if (filterPath.length) {
+      var mp = n.srcPath || [];
+      if (mp.length < filterPath.length) return false;
+      for (var k = 0; k < filterPath.length; k++) if (mp[k] !== filterPath[k]) return false;
+    }
     if (filterTags.length) {
       var mine = n.tags || [];
       for (var i = 0; i < filterTags.length; i++) {
@@ -4949,6 +5826,32 @@
             toast("끄지 못했습니다: " + errText(e));
           });
         });
+        /* ⚠️ 주소에 담아 보내는 길은 «누른 그 순간의 사진» 이다.
+           뒤에 기록을 고치거나 모양을 바꿔도 이미 만든 링크는 옛것 그대로다.
+           그걸 말해 주지 않으면 «고쳤는데 왜 그대로냐» 가 된다. */
+        if (opt.stale && opt.stale()) {
+          var warn = el("p", "crophint");
+          warn.style.color = "var(--brand)";
+          warn.textContent = "⚠️ 이 링크를 만든 뒤에 기록이나 모양이 바뀌었습니다. 받는 사람은 아직 옛 쪽을 봅니다.";
+          f.appendChild(warn);
+          var again = el("button", "btn sm", "🔄 링크 다시 만들기");
+          again.addEventListener("click", function () {
+            again.disabled = true; again.textContent = "만드는 중…";
+            opt.start().then(function (u) {
+              opt.setUrl(u);
+              if (opt.stamp) opt.stamp();
+              n.updatedAt = new Date().toISOString();
+              saveLocal(); if (connected) saveIndex();
+              toast("링크를 새로 만들었습니다. 이 주소를 다시 보내 주세요.");
+              if (after) after();
+              draw();
+            }).catch(function (e) {
+              again.disabled = false; again.textContent = "🔄 링크 다시 만들기";
+              toast("다시 만들지 못했습니다: " + errText(e));
+            });
+          });
+          row.appendChild(again);
+        }
         row.appendChild(cp); row.appendChild(op); row.appendChild(off);
         f.appendChild(row);
       } else {
@@ -5011,6 +5914,62 @@
       }
 
       body.appendChild(el("div", "sharesep", photos.length ? "② 무엇을 넘길지 고르세요" : "무엇을 넘길지 고르세요"));
+
+      shareRow({
+        title: "🌐 웹 쪽으로 — 사진·영상·녹음까지",
+        desc: "가장 잘 보이는 길입니다. 글·사진·영상·녹음이 한 쪽에 예쁘게 담깁니다. " +
+              "영상과 녹음은 그 자리에서 바로 재생됩니다. 받는 사람은 로그인도 앱도 필요 없습니다. " +
+              "⚠️ 링크는 «만든 그 순간» 이 담긴 사진입니다 — 뒤에 기록을 고치면 다시 만들어야 반영됩니다. " +
+              "⚠️ 이 기록에 딸린 사진·영상·파일이 «링크가 있는 사람 = 읽기» 로 열립니다.",
+        button: "🔗 웹 쪽 링크 만들기",
+        allowed: true,
+        getUrl: function () { return n.shareWebUrl; },
+        setUrl: function (u) { n.shareWebUrl = u; },
+        /* 링크를 만든 «때» 와 그때의 «모양» 을 적어 둔다. 이게 있어야 낡았는지 알 수 있다. */
+        stamp: function () { n.shareWebAt = Date.now(); n.shareWebTheme = settings.theme || "base"; },
+        stale: function () {
+          if (!n.shareWebUrl) return false;
+          if ((n.shareWebTheme || "base") !== (settings.theme || "base")) return true;
+          var made = n.shareWebAt || 0;
+          var edited = Date.parse(n.updatedAt) || n.updatedAt || 0;
+          return edited > made + 1000;   // 링크를 만들며 찍힌 1초 안쪽 차이는 넘긴다
+        },
+        start: function () {
+          var ids = sharedFileIds(n);
+          // 하나씩 차례로 연다. 한꺼번에 던지면 구글이 «너무 빠르다» 며 되돌려 보낸다.
+          return ids.reduce(function (chain, id) {
+            return chain.then(function () { return shareToAnyone(id).catch(function () { /* 이미 열려 있으면 그만 */ }); });
+          }, Promise.resolve()).then(function () {
+            n.shareWebAt = Date.now(); n.shareWebTheme = settings.theme || "base";
+            return webPageUrl(n);
+          });
+        },
+        stop: function () {
+          var ids = sharedFileIds(n);
+          return ids.reduce(function (chain, id) {
+            return chain.then(function () { return stopSharing(id); });
+          }, Promise.resolve());
+        }
+      });
+
+      /* ⚠️ .html 파일을 드라이브에 올려 링크를 줘도 «웹페이지» 로 안 열립니다.
+         구글이 2016년에 드라이브의 정적 웹 호스팅을 없앴기 때문입니다 — 내려받기 화면만 뜹니다.
+         대신 구글 문서를 «웹에 게시» 하면 사진·링크까지 그대로 있는 진짜 쪽이 됩니다.
+         받는 사람은 구글 계정도, 편집 화면도 안 봅니다. */
+      shareRow({
+        title: "🌐 웹 페이지로 — 사진·링크까지 한 쪽에",
+        desc: "가장 보기 좋은 길입니다. 편집 화면이 아니라 «읽는 쪽» 으로 열립니다. 사진·링크·소제목이 그대로 있고, 받는 사람은 로그인도 앱도 필요 없습니다. 폰에서도 그대로 열립니다. ⚠️ 아래 «글 하나만» 과는 따로 도는 스위치입니다 — 이쪽을 끄려면 이 줄의 «공유 끄기» 를 눌러야 합니다.",
+        button: "🔗 웹 페이지 만들기",
+        allowed: true,
+        getUrl: function () { return n.sharePubUrl; },
+        setUrl: function (u) { n.sharePubUrl = u; },
+        start: function () {
+          return ensureDoc(n)
+            .then(function (docId) { return publishDocToWeb(docId).then(function () { return docId; }); })
+            .then(function (docId) { return "https://docs.google.com/document/d/" + docId + "/pub"; });
+        },
+        stop: function () { return unpublishDoc(n.docId); }
+      });
 
       shareRow({
         title: "📄 글 하나만 — 구글 문서",
@@ -5096,7 +6055,7 @@
     else if (n.srcFolderId) linkBtn("📁 원본 폴더", "https://drive.google.com/drive/folders/" + n.srcFolderId,
       "이 자료가 원래 있던 폴더" + (n.srcFolderName ? " — " + n.srcFolderName : ""));
 
-    var shared = function () { return n.shareUrl || n.shareFolderUrl; };
+    var shared = function () { return n.shareUrl || n.shareFolderUrl || n.sharePubUrl || n.shareWebUrl; };
     var share = el("button", "btn sm", shared() ? "🔗 공유 중" : "🔗 링크로 공유");
     if (shared()) share.title = shared();
     share.addEventListener("click", function () {
@@ -5115,7 +6074,8 @@
     var scroll = el("div", "vscroll");
     var paper = el("article", "vpaper");
 
-    paper.appendChild(el("span", "badge", t.icon + " " + t.label));
+    if (crumbsOf(n).length) paper.appendChild(buildCrumbs(n, { self: true }));
+    paper.appendChild(paintType(el("span", "badge", t.icon + " " + t.label), t.key));
     paper.appendChild(el("h1", null, n.title || "(제목 없음)"));
     var metaLine = formatDate(n.createdAt);
     if ((n.tags || []).length) metaLine += "  ·  " + n.tags.map(function (x) { return "#" + x; }).join(" ");
@@ -5518,25 +6478,38 @@
 
     // ---- 목록식: 제목만 한 줄씩 ----
     if (settings.viewMode === "list") {
+      /* 목록 보기 = «디렉토리». 지금 정리 방식대로 폴더에 담아 보여 준다.
+         드라이브를 열었을 때와 같은 모양이라, 어디에 무엇이 있는지 화면과 드라이브가 어긋나지 않는다. */
       var table = el("div", "card listview");
+      var groups = {}, order = [];
       shown.forEach(function (n) {
-        var t = typeOf(n.type);
-        var row = el("div", "lrow");
-        row.setAttribute("data-eid", n.id);
-        row.appendChild(el("span", "lico", t.icon));
-        var ttl = el("button", "ltitle", n.title || "(제목 없음)");
-        ttl.addEventListener("click", function () { settings.viewMode = "stream"; saveSettingsLocal(); expanded[n.id] = true; render(); gotoEntry(n.id); });
-        row.appendChild(ttl);
-        var outs = outLinks(n).filter(function (l) { return l.to; }).length;
-        var ins = backLinks(n).length;
-        if (outs || ins) row.appendChild(el("span", "lmeta", "🔗 " + outs + "/" + ins));
-        var att = (n.blocks || []).filter(function (b) { return b.kind === "image" || b.kind === "file"; }).length;
-        if (att) row.appendChild(el("span", "lmeta", "📎 " + att));
-        row.appendChild(el("span", "lwhen", formatDate(n.createdAt).slice(0, 10)));
-        var bd = el("button", "btn xs danger", "✕");
-        bd.addEventListener("click", function () { removeEntry(n.id); });
-        row.appendChild(bd);
-        table.appendChild(row);
+        var key = listFolderOf(n);
+        if (!groups[key]) { groups[key] = []; order.push(key); }
+        groups[key].push(n);
+      });
+      /* 폴더 이름이 날짜로 시작하므로 «내림차순» 이라야 최신이 위로 온다.
+         목록의 다른 보기들이 전부 최신순인데 여기만 뒤집히면 «어제 것이 사라졌다» 고 여긴다. */
+      order.sort(function (a, b) {
+        if (a === "") return -1;            // 폴더 없는 것(맨 위에 놓이는 글)이 먼저
+        if (b === "") return 1;
+        return b.localeCompare(a, "ko");
+      });
+      order.forEach(function (key) {
+        var list = groups[key];
+        if (key !== "") {
+          var open = listOpen[key] !== false;   // 처음에는 펴 둔다
+          var fr = el("button", "lfolder");
+          fr.type = "button";
+          fr.appendChild(el("span", "ltwist", open ? "▾" : "▸"));
+          fr.appendChild(fileIconSvg("folder"));
+          fr.appendChild(el("span", "lfname", key + "/"));
+          fr.appendChild(el("span", "spacer"));
+          fr.appendChild(el("span", "lmeta", "기록 " + list.length + "편"));
+          fr.addEventListener("click", function () { listOpen[key] = !open; render(); });
+          table.appendChild(fr);
+          if (!open) return;
+        }
+        list.forEach(function (n) { table.appendChild(listRow(n, key !== "")); });
       });
       host.appendChild(table);
       return;
@@ -5547,12 +6520,13 @@
 
     shown.forEach(function (n) {
       var t = typeOf(n.type);
-      var card = el("article", "card entry");
+      var card = paintType(el("article", "card entry"), n.type);
       card.setAttribute("data-eid", n.id);
 
       if (n.pinned) card.classList.add("pinned");
 
       var head = el("div", "head");
+      if (crumbsOf(n).length) card.appendChild(buildCrumbs(n));
       head.appendChild(el("span", "badge", t.icon + " " + t.label));
       head.appendChild(el("h3", null, n.title));
       var line2 = el("span", "when");
@@ -5734,7 +6708,7 @@
   var SCAN_PARALLEL = 4;       // 동시에 물어볼 폴더 수
 
   function scanFolder(onStep) {
-    var files = [], seen = {}, visited = 0, truncated = false;
+    var files = [], dirs = [], seen = {}, visited = 0, truncated = false;
 
     // 한 단계(같은 깊이의 폴더들)를 훑고, 그 아래 단계를 다시 훑는다
     function walk(level) {
@@ -5752,7 +6726,11 @@
             if (k.mimeType === "application/vnd.google-apps.folder") {
               if (!seen[k.id]) {
                 seen[k.id] = 1;
-                nextLevel.push({ id: k.id, name: k.name, depth: dir.depth + 1, path: dir.path.concat([k.name]) });
+                var sub = { id: k.id, name: k.name, depth: dir.depth + 1, path: dir.path.concat([k.name]) };
+                nextLevel.push(sub);
+                /* ⚠️ 폴더도 따로 적어 둔다. 파일만 모으면 «빈 폴더» 가 통째로 사라진다.
+                   손으로 만들어 아직 아무것도 안 넣은 폴더가 딱 그 경우다. */
+                dirs.push({ id: k.id, name: k.name, path: sub.path });
               }
               return;
             }
@@ -5774,7 +6752,7 @@
     }
 
     return walk([{ id: folder.id, name: folder.name, depth: 0, path: [] }]).then(function () {
-      return { files: files, folders: visited, truncated: truncated };
+      return { files: files, dirs: dirs, folders: visited, truncated: truncated };
     });
   }
   function fetchText(id) {
@@ -5951,6 +6929,7 @@
          첨부·사진은 블록의 fileId 로 알아볼 수 있지만, 구글 문서는 링크 블록이라 남는 것이 없다.
          그래서 갈래를 가리지 않고 여기에 적어 둔다 — slim() 에도 함께 있어야 살아남는다. */
       srcId: f.id,
+      srcPath: (f._path || []).slice(),   // 연결 폴더부터 여기까지 — 길찾기 줄이 이걸로 선다
       /* ⚠️ 여기에 folderId 를 넣으면 안 된다. 이 앱에서 folderId 는
          «이 기록이 가진 폴더» 라는 뜻이고, 지우기·공유·옮기기가 전부 그리로 향한다.
          가져온 자료가 있던 곳은 «남의 폴더» 다 — 십삼 년치가 통째로 들어 있는 곳이다.
@@ -6016,6 +6995,7 @@
           updatedAt: updated,
           mdId: f.id,
           mdName: f.name,
+          srcPath: (f._path || []).slice(),
           // 위 entryFromFile 과 같은 이유 — 남의 폴더에 folderId 를 걸면 안 된다
           srcFolderId: (f._parent !== folder.id) ? f._parent : null,
           srcFolderName: (f._parent !== folder.id) ? f._parentName : null,
@@ -6589,7 +7569,7 @@
           return true;
         });
         status.textContent = "폴더 " + scan.folders + "곳을 훑었습니다." +
-          (scan.truncated ? "  (5단계·400곳 한도까지만 봤습니다)" : "");
+          (scan.truncated ? ("  (" + SCAN_DEPTH + "단계·" + SCAN_FOLDER_MAX + "곳 한도까지만 봤습니다)") : "");
         draw(targets);
       })
       .catch(function (e) {
@@ -6623,6 +7603,44 @@
       });
     });
     return out;
+  }
+
+  /* 드라이브를 «실제로 훑은 결과» 로 나무를 세운다.
+     buildDriveTree() 가 색인으로 그린 예상도라면, 이쪽은 지금 드라이브에 있는 그대로다.
+     손으로 만든 폴더·앱이 모르는 파일이 여기서는 보인다. */
+  function buildLiveTree(scan) {
+    var root = { type: "folder", name: (folder.name || "내 폴더"), children: [], isRoot: true, live: true };
+    function walkTo(path) {
+      var here = root;
+      path.forEach(function (name) {
+        var found = null;
+        for (var i = 0; i < here.children.length; i++) {
+          if (here.children[i].type === "folder" && here.children[i].name === name) { found = here.children[i]; break; }
+        }
+        if (!found) { found = { type: "folder", name: name, children: [] }; here.children.push(found); }
+        here = found;
+      });
+      return here;
+    }
+    // 빈 폴더까지 보이도록 «지나간 폴더» 를 먼저 다 세운다
+    (scan.dirs || []).forEach(function (d) { walkTo(d.path); });
+    (scan.files || []).forEach(function (f) {
+      var here = walkTo(f._path || []);
+      here.children.push({
+        type: "file", name: f.name, size: Number(f.size || 0),
+        icon: /^image\//.test(f.mimeType || "") ? "img"
+            : (/audio|video/.test(f.mimeType || "") ? "media"
+            : (/\.md$/i.test(f.name) ? "md" : "file"))
+      });
+    });
+    (function sortTree(node) {
+      node.children.sort(function (a, b) {
+        if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+        return a.name.localeCompare(b.name, "ko");
+      });
+      node.children.forEach(function (c) { if (c.type === "folder") sortTree(c); });
+    })(root);
+    return root;
   }
 
   function buildDriveTree() {
@@ -6737,6 +7755,14 @@
     hint.style.margin = "0 0 6px";
     hint.textContent = "정리 방식 «" + fmLabel + "» 기준 · ▸ 로 접었다 펴고, 📝 를 누르면 그 기록이 열립니다.";
     body.appendChild(hint);
+    /* ⚠️ 이 그림은 «색인» 으로 그린 예상도다. 드라이브를 읽은 것이 아니다.
+       그래서 드라이브에서 손으로 만든 폴더는 여기 안 나온다 — 몇 번을 다시 열어도 안 나온다.
+       그 사실을 말해 주지 않으면 «고장 났다» 고 여기게 된다. */
+    var live = el("p", "crophint");
+    live.style.margin = "0 0 8px";
+    live.textContent = "이 그림은 지금 목록(색인)으로 그린 «이렇게 됩니다» 입니다. 드라이브를 직접 읽은 것이 아니라, " +
+      "손으로 만든 폴더는 여기 안 보입니다. 진짜 드라이브가 궁금하면 아래 «드라이브에서 다시 읽기» 를 누르세요.";
+    body.appendChild(live);
 
     var treeBox = el("div", "treebox");
     body.appendChild(treeBox);
@@ -6762,6 +7788,30 @@
       })(root, root.name);
       draw();
     });
+    var reload = el("button", "btn sm", "🔄 드라이브에서 다시 읽기");
+    reload.disabled = !connected;
+    reload.title = connected ? "드라이브를 실제로 훑어 지금 있는 폴더를 그대로 보여 줍니다"
+                             : "드라이브에 연결한 뒤에 쓸 수 있습니다";
+    reload.addEventListener("click", function () {
+      reload.disabled = true;
+      live.textContent = "드라이브를 훑는 중…";
+      scanFolder(function (n) { live.textContent = "드라이브를 훑는 중… 폴더 " + n + "곳"; })
+        .then(function (scan) {
+          root = buildLiveTree(scan);
+          treeOpen[root.name] = true;
+          live.textContent = "드라이브를 그대로 읽었습니다 — 폴더 " + scan.folders + "곳 · 파일 " + scan.files.length + "개." +
+            (scan.truncated ? " (" + SCAN_DEPTH + "단계·" + SCAN_FOLDER_MAX + "곳 한도까지)" : "") +
+            " 손으로 만든 폴더도 이제 보입니다.";
+          reload.disabled = false;
+          draw();
+        })
+        .catch(function (e) {
+          live.textContent = "드라이브를 못 읽었습니다: " + errText(e);
+          reload.disabled = false;
+        });
+    });
+    foot.appendChild(reload);
+    foot.appendChild(el("span", "spacer"));
     foot.appendChild(collapse); foot.appendChild(expand);
     m.appendChild(foot);
 
@@ -7392,6 +8442,10 @@
     closeModal();
     var draft = JSON.parse(JSON.stringify(settings));
     var active = tab || "storage";
+    /* 모양 고르기는 «누르면 바로» 화면을 바꿔 보여 준다.
+       그래서 저장하지 않고 닫으면 원래대로 되돌려야 한다 — 안 그러면
+       저장한 적 없는 모양이 남았다가, 다음에 열 때 딴 모양으로 되돌아간다. */
+    modalCleanup = function () { applyTheme(settings.theme || "base"); };
 
     var bg = el("div", "modal-bg");
     var m = el("div", "card modal");
@@ -7404,7 +8458,7 @@
 
     var tabs = el("div", "tabs");
     var body = el("div", "mbody");
-    var TABS = [["storage", "저장 위치"], ["types", "기록 유형"], ["naming", "파일 이름"],
+    var TABS = [["look", "모양"], ["storage", "저장 위치"], ["types", "기록 유형"], ["naming", "파일 이름"],
                 ["capture", "웹 캡처"], ["advanced", "고급"]];
     TABS.forEach(function (t) {
       var b = el("button", "tab" + (active === t[0] ? " on" : ""), t[1]);
@@ -7423,6 +8477,7 @@
     save.addEventListener("click", function () {
       settings = normalizeSettings(draft);
       saveSettingsLocal();
+      applyTheme(settings.theme || "base");
       subFolderId = null; folderCache = {};
       if (!settings.types.some(function (t) { return t.key === currentType; })) currentType = settings.types[0].key;
       renderTypeChips(); renderBlocks(); render(); updateChrome();
@@ -7444,11 +8499,44 @@
         b.className = "tab" + (TABS[i][0] === active ? " on" : "");
       });
       body.innerHTML = "";
-      if (active === "storage") paintStorage();
+      if (active === "look") paintLook();
+      else if (active === "storage") paintStorage();
       else if (active === "types") paintTypes();
       else if (active === "naming") paintNaming();
       else if (active === "capture") paintCapture();
       else paintAdvanced();
+    }
+
+    /* 모양 고르기 — 누르면 «그 자리에서» 화면이 바뀐다.
+       설명을 읽고 고르는 게 아니라, 바뀐 걸 보고 고르게 하려는 것이다. */
+    function paintLook() {
+      var f = el("div", "field");
+      ensureAllThemeFonts();   // 일곱 갈래를 한눈에 보여 주려면 글꼴이 먼저 와 있어야 한다
+      f.appendChild(el("label", null, "화면 모양"));
+      f.appendChild(el("p", "desc",
+        "왼쪽 위로 갈수록 아이답고, 오른쪽 아래로 갈수록 정밀합니다. " +
+        "누르면 바로 바뀌고, 저장을 눌러야 계속 남습니다. " +
+        "어두운 화면을 쓰는 기기에서는 어느 모양이든 알아서 어둡게 나옵니다."));
+      f.appendChild(themeAxis());
+      var grid = el("div", "themegrid");
+      THEMES.forEach(function (t) {
+        var card = el("button", "themecard" + (draft.theme === t.key ? " on" : ""));
+        card.type = "button";
+        card.appendChild(themeSwatch(t.key));
+        var name = el("div", "themename");
+        name.appendChild(el("strong", null, t.label));
+        name.appendChild(el("span", null, t.sub));
+        card.appendChild(name);
+        card.appendChild(el("p", "desc", t.desc));
+        card.addEventListener("click", function () {
+          draft.theme = t.key;
+          applyTheme(t.key);      // 미리 보여 준다
+          paint();
+        });
+        grid.appendChild(card);
+      });
+      f.appendChild(grid);
+      body.appendChild(f);
     }
 
     /* 웹에서 본 것을 바로 이 기록장으로 보내는 두 갈래 */
@@ -7534,12 +8622,24 @@
       inp.style.flex = "1 1 240px"; inp.style.width = "auto";
       inp.placeholder = "https://drive.google.com/drive/folders/1AbCd… 또는 폴더 ID";
       if (folder.id) inp.value = "https://drive.google.com/drive/folders/" + folder.id;
+      /* 링크를 붙여넣게 하는 것은 «주소를 아는 사람» 에게만 쉬운 길이다.
+         탐색기처럼 눌러 들어가며 고를 수 있게 한다. 로그인해야 폴더 목록을 물어볼 수 있다. */
+      var pick = el("button", "btn", "📂 폴더 찾아보기");
+      pick.disabled = !accessToken;
+      pick.title = accessToken ? "내 드라이브를 열어 폴더를 골라 봅니다" : "먼저 1단계에서 로그인해 주세요";
+      pick.addEventListener("click", function () {
+        openFolderBrowser(function (f) {
+          inp.value = "https://drive.google.com/drive/folders/" + f.id;
+          status.textContent = "「" + f.name + "」 을 고르셨습니다. 연결하는 중…";
+          connect(f.id).then(function () { if (connected) { status.textContent = "연결됨 — " + folder.name; paint(); } });
+        });
+      });
       var chk = el("button", "btn primary", "이 폴더로 연결");
       chk.addEventListener("click", function () {
         status.textContent = "확인 중…";
         connect(inp.value).then(function () { if (connected) { status.textContent = "연결됨"; } });
       });
-      r.appendChild(inp); r.appendChild(chk);
+      r.appendChild(inp); r.appendChild(pick); r.appendChild(chk);
       f2.appendChild(r);
       var d = el("p", "desc");
       d.textContent = folder.id
@@ -7550,35 +8650,27 @@
 
       var f3 = el("div", "field");
       f3.appendChild(el("label", null, "3단계 · 폴더 정리 방식"));
-      var sel3 = el("select", "inp");
-      FOLDER_MODES.forEach(function (fm) {
-        var o = el("option", null, fm.label + " — " + fm.desc);
-        o.value = fm.key;
-        sel3.appendChild(o);
-      });
-      sel3.value = draft.folderMode;
-      var d3 = el("p", "desc");
+      f3.appendChild(el("p", "desc", "고른 방식대로 드라이브에 이렇게 쌓입니다. 눌러서 견줘 보세요."));
+      /* 예전에는 «고르는 목록(select)» 이었는데, 목록을 펼치면 그 아래 폴더 그림을 통째로 가렸다.
+         정작 봐야 할 것을 가리는 셈이라, 다섯 갈래를 그림과 함께 펼쳐 놓는다. */
+      var modeGrid = el("div", "modegrid");
       function paintMode() {
-        var ex = {
-          perEntry: "내 폴더/\n └ 2026-08-16_경험_수업회고/\n     ├ 2026-08-16_경험_수업회고.md\n     └ 2026-08-16_수업회고_01.png",
-          materials: "내 폴더/\n ├ 2026-08-16_경험_수업회고.md\n └ 자료/\n     └ 2026-08-16_수업회고_01.png",
-          monthly: "내 폴더/\n └ 2026-08/\n     ├ 2026-08-16_경험_수업회고.md\n     └ 2026-08-16_수업회고_01.png",
-          flat: "내 폴더/\n ├ 2026-08-16_경험_수업회고.md\n └ 2026-08-16_수업회고_01.png",
-          tag: "태그가 «수업설계, 3학년» 인 기록이라면\n\n내 폴더/\n ├ 수업설계/            ← 첫 태그가 진짜 자리\n │   ├ 2026-08-16_경험_수업회고.md\n │   └ 2026-08-16_수업회고_01.png\n └ 3학년/\n     └ 2026-08-16_경험_수업회고.md  ← 바로가기(표지판)"
-        }[draft.folderMode] || "";
-        d3.textContent = ex;
-        d3.style.whiteSpace = "pre";
-        d3.style.fontFamily = "ui-monospace, Consolas, monospace";
-        d3.style.background = "var(--bg)";
-        d3.style.border = "1px solid var(--line)";
-        d3.style.borderRadius = "9px";
-        d3.style.padding = "10px 12px";
-        d3.style.overflowX = "auto";
+        modeGrid.innerHTML = "";
+        FOLDER_MODES.forEach(function (fm) {
+          var card = el("button", "modecard" + (draft.folderMode === fm.key ? " on" : ""));
+          card.type = "button";
+          var h = el("div", "modehead");
+          h.appendChild(el("strong", null, fm.label));
+          if (draft.folderMode === fm.key) h.appendChild(el("span", "badge", "고름"));
+          card.appendChild(h);
+          card.appendChild(folderTree(fm.key));
+          card.appendChild(el("p", "desc", fm.desc));
+          card.addEventListener("click", function () { draft.folderMode = fm.key; paintMode(); });
+          modeGrid.appendChild(card);
+        });
       }
-      sel3.addEventListener("change", function () { draft.folderMode = sel3.value; paintMode(); });
       paintMode();
-      f3.appendChild(sel3);
-      f3.appendChild(d3);
+      f3.appendChild(modeGrid);
       f3.appendChild(el("p", "desc",
         "방식을 바꾸면 앞으로 저장되는 것부터 적용됩니다. 이미 올라간 파일을 옮기려면 아래 버튼을 쓰세요."));
       var reorg = el("button", "btn sm", "기존 파일도 새 방식으로 옮기기");
@@ -7963,10 +9055,103 @@
   /* =========================================================
      14. 시작
      ========================================================= */
+  /* 고른 모양을 먼저 입힌다. 그려 놓고 나중에 입히면 첫 화면이 한 번 «번쩍» 한다. */
+  applyTheme(settings.theme || "base");
+
   renderTypeChips();
   renderBlocks();
   render();
   updateChrome();
+
+  /* ---- 처음 온 사람에게 모양부터 묻는다 ----
+     settings.theme 이 «빈 값» 이면 아직 고른 적이 없다는 뜻이다.
+     ⚠️ "base" 와 "" 를 같게 두면 안 된다. 「기본을 고른 사람」에게 매번 또 묻게 된다. */
+  function openThemePicker(onDone) {
+    closeModal();
+    var picked = settings.theme || "base";
+    var bg = el("div", "modal-bg");
+    var m = el("div", "card modal"); m.style.maxWidth = "820px";
+    var head = el("div", "mhead");
+    head.appendChild(el("h3", null, "📝 어떤 모양으로 쓸까요?"));
+    m.appendChild(head);
+    var body = el("div", "mbody");
+    body.appendChild(el("p", "desc",
+      "기록장 화면의 모양입니다. 왼쪽 위로 갈수록 아이답고, 오른쪽 아래로 갈수록 정밀합니다. " +
+      "지금 고르지 않아도 되고, 나중에 ⚙️ 설정 → 모양에서 언제든 바꿀 수 있습니다. " +
+      "쌓아 둔 기록은 어느 모양을 골라도 그대로입니다."));
+    body.appendChild(themeAxis());
+    var grid = el("div", "themegrid");
+    function draw() {
+      grid.innerHTML = "";
+      THEMES.forEach(function (t) {
+        var card = el("button", "themecard" + (picked === t.key ? " on" : ""));
+        card.type = "button";
+        card.appendChild(themeSwatch(t.key));
+        var name = el("div", "themename");
+        name.appendChild(el("strong", null, t.label));
+        name.appendChild(el("span", null, t.sub));
+        card.appendChild(name);
+        card.appendChild(el("p", "desc", t.desc));
+        card.addEventListener("click", function () { picked = t.key; applyTheme(picked); draw(); });
+        grid.appendChild(card);
+      });
+    }
+    ensureAllThemeFonts();
+    draw();
+    body.appendChild(grid);
+    m.appendChild(body);
+    var foot = el("div", "mfoot");
+    foot.appendChild(el("span", "spacer"));
+    var go = el("button", "btn primary", "이걸로 시작하기");
+    go.addEventListener("click", function () {
+      settings.theme = picked;
+      saveSettingsLocal();
+      applyTheme(picked);
+      render(); renderTypeChips();
+      closeModal();
+      if (connected) saveSettingsRemote();
+      if (onDone) onDone();
+    });
+    foot.appendChild(go);
+    m.appendChild(foot);
+    bg.appendChild(m);
+    $("modalHost").appendChild(bg);
+    modalEl = bg;   // ⚠️ 이걸 빠뜨리면 closeModal() 이 지울 것을 못 찾아 창이 안 닫힌다
+    // 바깥을 눌러 넘기면 «기본» 으로 정해 준다. 물음이 매번 다시 뜨면 성가시다.
+    modalCleanup = function () {
+      if (!settings.theme) { settings.theme = "base"; saveSettingsLocal(); applyTheme("base"); }
+    };
+    bg.addEventListener("click", function (e) { if (e.target === bg) closeModal(); });
+  }
+  /* 처음 온 사람에게만 «묻고», 이미 쓰던 사람에게는 «알린다».
+     쌓아 둔 기록이 있는 사람 앞에 창을 띄워 막아서면 남의 일을 가로채는 것이다.
+     ⚠️ 다른 창이 열려 있으면 띄우지 않는다 — 하던 일을 덮어 버린다. */
+  if (!settings.theme) {
+    setTimeout(function () {
+      if (modalEl || document.querySelector(".modal-bg")) return;
+      if (!entries.length) openThemePicker();
+      else showThemeNotice();
+    }, 400);
+  }
+  function showThemeNotice() {
+    var bar = $("draftBar");
+    if (!bar || !bar.classList.contains("hidden")) return;   // 쓰다 만 글 알림이 먼저다
+    bar.className = "banner draft";
+    bar.innerHTML = "";
+    var gr = el("div", "grow");
+    gr.appendChild(el("b", null, "화면 «모양» 을 고를 수 있게 되었습니다."));
+    gr.appendChild(el("span", null, " 메모지 · 블록 · 공책 — 기록은 그대로입니다."));
+    bar.appendChild(gr);
+    var go = el("button", "btn sm primary", "골라 보기");
+    go.addEventListener("click", function () { bar.className = "banner draft hidden"; openSettings("look"); });
+    var no = el("button", "btn sm ghost", "나중에");
+    no.addEventListener("click", function () {
+      settings.theme = "base"; saveSettingsLocal();
+      if (connected) saveSettingsRemote();
+      bar.className = "banner draft hidden";
+    });
+    bar.appendChild(go); bar.appendChild(no);
+  }
   rehydratePending();   // 지난번에 못 올린 사진·파일 되살리기
   restoreDraft();   // 쓰다 만 내용 되살리기
   intakeShared();   // 밖에서 «공유»·«웹 캡처» 로 보낸 것 받기 (쓰던 글 뒤에 이어 붙는다)

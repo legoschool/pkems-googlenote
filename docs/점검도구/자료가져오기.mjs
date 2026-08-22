@@ -66,7 +66,9 @@ const check = (name, ok, detail = "") => {
     └ 2020 학급운영계획 (구글 문서)          ← 내려받을 실체가 없다. 링크로 걸어야 한다
    --------------------------------------------------------- */
 const FAKE_DRIVE = `(function () {
-  localStorage.clear();
+  /* 이 씨앗은 «쪽이 뜰 때마다» 돈다. 그래서 그냥 비우면 새로고침 한 번에
+     점검이 심어 둔 것이 통째로 날아간다. 지켜야 할 때는 빗장(keep)을 걸어 둔다. */
+  if (!sessionStorage.getItem('keep')) localStorage.clear();
   localStorage.setItem('trace.connected', '1');
   localStorage.setItem('trace.folder', JSON.stringify({ id: 'ROOT', name: '내 폴더', link: '' }));
   localStorage.setItem('trace.token.v1', JSON.stringify({ t: 'FAKE_TOKEN', exp: Date.now() + 3600000 }));
@@ -102,6 +104,7 @@ const FAKE_DRIVE = `(function () {
     f('IMG1', '연수사진.png', 'image/png'),
     f('PDF1', '강의자료.pdf', 'application/pdf')
   ];
+  T.root = T.ROOT;   // 진짜 드라이브에서 'root' 는 「내 드라이브」의 별칭이다
   T.DMANY = [];
   for (var i = 1; i <= 1100; i++) T.DMANY.push(f('M' + i, '사진' + i + '.jpg', 'image/jpeg'));
 
@@ -474,6 +477,52 @@ check("⚠️ 지워도 원본이 든 폴더를 통째로 안 버린다",
   !afterDel.f.trashed.includes("DSCI") && !afterDel.f.trashed.includes("D2019"),
   `휴지통: ${afterDel.f.trashed.join(",") || "없음"}`);
 
+/* ---- ④-2 길찾기 줄 — 이 기록이 «어디에» 있는지 ----
+   폴더를 훑을 때 거쳐 온 길을 srcPath 에 남긴다. 그게 화면에서 줄로 서고,
+   누르면 그 아래에 있는 것만 남아야 한다. */
+await findOne("물의 상태변화 학습지");
+await wait(800);
+const crumb = await ev(`(() => {
+  const c = document.querySelector('.card.entry .crumbs');
+  if (!c) return 'NO_CRUMBS';
+  return Array.from(c.children).map(e => e.textContent).join(" ");
+})()`);
+check("기록이 어디에 있는지 줄로 보여 준다",
+  /2019/.test(crumb) && /3학년/.test(crumb) && /과학/.test(crumb) && /›/.test(crumb),
+  String(crumb));
+
+/* ⚠️ 목록 맨 위 카드를 집으면 안 된다 — 사진 1100장이 위에 깔려 있어 엉뚱한 기록의 줄을 누르게 된다.
+   검색으로 좁혀 «그 기록의» 줄을 누른 다음, 검색을 풀어 남은 것을 센다. */
+const clicked = await ev(`(() => {
+  const c = document.querySelector('.card.entry .crumbs');
+  if (!c) return 'NO_CRUMBS';
+  const b = Array.from(c.querySelectorAll('.crumb')).find(x => x.textContent === '3학년');
+  if (!b) return 'NO_GRADE';
+  b.click();
+  return 'OK';
+})()`);
+await ev(`(() => { const q = document.getElementById('search'); q.value=''; q.dispatchEvent(new Event('input',{bubbles:true})); return true; })()`);
+await wait(800);
+const after2 = Number(await ev(`document.querySelectorAll('.card.entry, .lrow').length`));
+check("길찾기 줄을 누르면 그 아래만 남는다",
+  clicked === "OK" && after2 > 0 && after2 < 20, `${clicked} · ${after2}편`);
+
+const chip = await ev(`(() => {
+  const mark = String.fromCodePoint(0x1F4C1);
+  const c = Array.from(document.querySelectorAll('.chip')).find(x => (x.textContent||'').indexOf(mark) === 0);
+  return c ? c.textContent : 'NO_CHIP';
+})()`);
+check("어느 폴더를 보고 있는지 알려 준다", /2019/.test(chip) && /3학년/.test(chip), String(chip));
+
+await ev(`(() => {
+  const mark = String.fromCodePoint(0x1F4C1);
+  const c = Array.from(document.querySelectorAll('.chip')).find(x => (x.textContent||'').indexOf(mark) === 0);
+  if (c) c.click(); return true;
+})()`);
+await wait(800);
+const restored = Number(await ev(`document.querySelectorAll('.card.entry, .lrow').length`));
+check("풀면 다시 다 보인다", restored > after2, `${after2} → ${restored}편`);
+
 /* ---- ⑤ 태그로 걸러 보기 ---- */
 await ev(`(() => { const q = document.getElementById('search'); if (q) { q.value=''; q.dispatchEvent(new Event('input',{bubbles:true})); } return true; })()`);
 await wait(800);
@@ -486,6 +535,227 @@ const tagged = await ev(`(() => {
 await wait(600);
 check("폴더 이름에서 온 태그로 걸러진다", Number(tagged) > 0 && Number(tagged) < 50,
   Number(tagged) < 0 ? "«과학» 태그를 못 찾음" : `${tagged}편`);
+
+/* ---- ⑥ 폴더 찾아보기 — 탐색기처럼 눌러 들어가며 고른다 ----
+   링크를 붙여넣는 길은 «주소를 아는 사람» 에게만 쉽다.
+   가짜 드라이브가 폴더 나무를 들고 있으니, 실제로 눌러 들어가 본다. */
+await ev(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
+await ev(`document.getElementById('btnSettings').click(); true`);
+await wait(500);
+await ev(`(() => {
+  const t = Array.from(document.querySelectorAll('.tabs .tab')).find(x => x.textContent === '저장 위치');
+  if (t) t.click(); return true;
+})()`);
+await wait(500);
+const opened = await ev(`(() => {
+  const b = Array.from(document.querySelectorAll('.mbody button')).find(x => (x.textContent||'').includes('찾아보기'));
+  if (!b) return 'NO_BUTTON';
+  if (b.disabled) return 'DISABLED';
+  b.click(); return 'OK';
+})()`);
+await wait(1200);
+const browser = await ev(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('폴더 고르기'));
+  if (!m) return 'NO_MODAL';
+  return JSON.stringify({
+    crumbs: Array.from(m.querySelectorAll('.crumb')).map(e => e.textContent),
+    rows: Array.from(m.querySelectorAll('.pickrow .fname')).map(e => e.textContent),
+    icons: m.querySelectorAll('.pickrow svg').length
+  });
+})()`);
+const br = /^NO_/.test(browser) ? null : JSON.parse(browser);
+check("«폴더 찾아보기» 가 내 드라이브를 연다 (폴더만)",
+  opened === "OK" && !!br && br.crumbs[0] === "내 드라이브" &&
+  br.rows.length === 3 && br.rows.join(",") === "2019,연수,사진많은폴더",
+  br ? `${br.crumbs.join(" › ")} — ${br.rows.join(", ")}` : `${opened} / ${browser}`);
+check("폴더마다 폴더 그림이 붙는다", !!br && br.icons === br.rows.length, br ? `${br.icons}개` : "");
+
+// 폴더를 눌러 «안으로» 들어가고, 길찾기 줄이 따라오는지
+const dived = await ev(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('폴더 고르기'));
+  const row = Array.from(m.querySelectorAll('.pickrow')).find(r => (r.textContent||'').indexOf('2019') === 0);
+  if (!row) return 'NO_2019';
+  row.click(); return 'OK';
+})()`);
+await wait(1200);
+const inside = await ev(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('폴더 고르기'));
+  return JSON.stringify({
+    crumbs: Array.from(m.querySelectorAll('.crumb')).map(e => e.textContent),
+    rows: Array.from(m.querySelectorAll('.pickrow .fname')).map(e => e.textContent)
+  });
+})()`);
+const ins = /^NO_/.test(inside) ? null : JSON.parse(inside);
+check("폴더를 눌러 안으로 들어간다",
+  dived === "OK" && !!ins && ins.crumbs.length === 2 && ins.rows.indexOf("3학년") >= 0,
+  ins ? `${ins.crumbs.join(" › ")} — ${ins.rows.join(", ")}` : `${dived} / ${inside}`);
+
+// 「내 드라이브」 통째로는 못 고르게 막았는지 — 뿌리에 기록장 파일을 흩뿌리면 안 된다
+const rootGuard = await ev(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('폴더 고르기'));
+  const home = Array.from(m.querySelectorAll('.crumb')).find(c => c.textContent === '내 드라이브');
+  if (home) home.click();
+  return 'OK';
+})()`);
+await wait(1000);
+await ev(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('폴더 고르기'));
+  const take = Array.from(m.querySelectorAll('.mfoot button')).find(b => (b.textContent||'').includes('여기로 정하기'));
+  if (take) take.click(); return true;
+})()`);
+await wait(500);
+const stillOpen = await ev(`Array.from(document.querySelectorAll('.card.modal')).some(x => (x.textContent||'').includes('폴더 고르기'))`);
+check("드라이브 맨 위는 못 고르게 막는다", rootGuard === "OK" && stillOpen === true,
+  stillOpen ? "막힘" : "그냥 골라짐");
+await ev(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
+
+/* ---- ⑦ 웹 페이지로 공유 ----
+   .html 을 드라이브에 올려 링크를 줘도 «웹페이지» 로 안 열린다 (구글이 2016년에 없앴다).
+   대신 구글 문서를 «웹에 게시» 하면 사진·링크가 그대로 있는 읽는 쪽이 된다. */
+await ev(`(() => {
+  const q = document.getElementById('search'); q.value = '물의 상태변화 학습지';
+  q.dispatchEvent(new Event('input', { bubbles: true })); return true;
+})()`);
+await wait(700);
+await ev(`(() => {
+  const v = Array.from(document.querySelectorAll('.card.entry button')).find(x => (x.textContent||'').includes('전체 보기'));
+  if (v) v.click(); return true;
+})()`);
+await wait(700);
+const shareUi = await ev(`(() => {
+  const b = Array.from(document.querySelectorAll('.viewer .vtop button')).find(x => (x.textContent||'').includes('공유'));
+  if (!b) return 'NO_BUTTON';
+  b.click();
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('링크로 공유'));
+  if (!m) return 'NO_MODAL';
+  return m.textContent;
+})()`);
+check("공유 창에 «웹 페이지로» 가 생겼다", /웹 페이지/.test(String(shareUi)), String(shareUi).slice(0, 90));
+await ev(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
+
+/* ---------- 목록 보기 = 디렉토리 · 연결을 그 자리에서 보기 ---------- */
+/* ⚠️ 여기서 새로고침하면 안 된다 — 가짜 드라이브가 뜰 때 localStorage 를 비운다.
+   화면에 있는 「목록」 단추를 눌러 보기 방식을 바꾼다. 사람이 하는 것과 같은 길이다. */
+await ev(`(() => {
+  const q = document.getElementById('search'); if (q) { q.value=''; q.dispatchEvent(new Event('input',{bubbles:true})); }
+  const b = Array.from(document.querySelectorAll('.vbtn')).find(x => (x.textContent||'').includes('목록'));
+  if (b) b.click();
+  return !!b;
+})()`);
+await wait(900);
+const dirList = await ev(`(() => {
+  const folders = Array.from(document.querySelectorAll('.lfolder .lfname')).map(e => e.textContent);
+  return JSON.stringify({
+    folders: folders.slice(0, 3),
+    count: folders.length,
+    indented: document.querySelectorAll('.lrow.lin').length,
+    icons: document.querySelectorAll('.lfolder svg').length
+  });
+})()`);
+const dl = JSON.parse(dirList);
+check("목록 보기가 디렉토리처럼 폴더로 갈린다", dl.count > 0 && dl.indented > 0 && dl.icons === dl.count,
+  `폴더 ${dl.count}개 · 들여쓴 줄 ${dl.indented}개`);
+check("폴더가 최신 것부터 온다", dl.folders.length < 2 || dl.folders[0] >= dl.folders[1],
+  dl.folders.join(" / "));
+
+// 폴더를 접으면 그 안의 줄이 사라져야 한다
+const folded = await ev(`(() => {
+  const before = document.querySelectorAll('.lrow').length;
+  const f = document.querySelector('.lfolder');
+  if (!f) return -1;
+  f.click();
+  return before - document.querySelectorAll('.lrow').length;
+})()`);
+await wait(500);
+check("폴더를 접으면 그 안이 접힌다", Number(folded) > 0, `${folded}줄 줄어듦`);
+await ev(`(() => { const f = document.querySelector('.lfolder'); if (f) f.click(); return true; })()`);
+await wait(500);
+
+/* ---- ⑧ 웹 쪽 링크는 «누른 그 순간의 사진» 이다 ----
+   주소에 글과 모양이 박혀 가므로, 뒤에 고쳐도 이미 보낸 링크는 옛것이다.
+   그 사실을 화면이 말해 주지 않으면 «고쳤는데 왜 그대로냐» 가 된다. */
+await ev(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
+// 링크를 이미 만들어 둔 것처럼 꾸며 놓는다 (실제 만들기는 드라이브가 필요하다)
+const faked = await ev(`(() => {
+  const L = JSON.parse(localStorage.getItem('trace.entries.v2') || '[]');
+  const n = L.find(e => /물의 상태변화 학습지/.test(e.title || ''));
+  if (!n) return 'NO_ENTRY';
+  n.shareWebUrl = location.origin + '/view.html#d=FAKE';
+  n.shareWebAt = Date.now();
+  n.shareWebTheme = 'base';
+  localStorage.setItem('trace.entries.v2', JSON.stringify(L));
+  sessionStorage.setItem('keep', '1');   // 아래 새로고침에서 씨앗이 안 날아가게
+  // ⚠️ 앞 점검이 보기 방식을 «목록» 으로 바꿔 놓았다. 목록에는 .card.entry 가 없다.
+  const st = JSON.parse(localStorage.getItem('trace.settings.v1') || '{}');
+  st.viewMode = 'stream'; st.theme = 'base';
+  localStorage.setItem('trace.settings.v1', JSON.stringify(st));
+  return n.title;
+})()`);
+await send("Page.reload", { ignoreCache: true });
+await wait(3000);
+
+async function openShare() {
+  await ev(`(() => {
+    const q = document.getElementById('search'); q.value = '물의 상태변화 학습지';
+    q.dispatchEvent(new Event('input', { bubbles: true })); return true;
+  })()`);
+  await wait(700);
+  await ev(`(() => {
+    const v = Array.from(document.querySelectorAll('.card.entry button')).find(x => (x.textContent||'').includes('전체 보기'));
+    if (v) v.click(); return true;
+  })()`);
+  await wait(700);
+  return ev(`(() => {
+    const b = Array.from(document.querySelectorAll('.viewer .vtop button')).find(x => (x.textContent||'').includes('공유'));
+    if (!b) return 'NO_BUTTON';
+    b.click(); return 'OK';
+  })()`);
+}
+
+// ① 모양이 그대로면 «낡음» 경고가 없어야 한다
+const opened1 = await openShare();
+await wait(800);
+const fresh = await ev(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('링크로 공유'));
+  if (!m) return 'NO_MODAL';
+  return JSON.stringify({
+    warn: /링크를 만든 뒤에/.test(m.textContent),
+    again: !!Array.from(m.querySelectorAll('button')).find(b => (b.textContent||'').includes('다시 만들기'))
+  });
+})()`);
+const fr = /^NO_/.test(fresh) ? null : JSON.parse(fresh);
+check("갓 만든 링크에는 «낡음» 경고가 없다",
+  opened1 === "OK" && !!fr && !fr.warn && !fr.again, fresh);
+
+// ② 모양(프리셋)을 바꾸면 낡은 것이 되어야 한다
+await ev(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
+await ev(`(() => {
+  const s = JSON.parse(localStorage.getItem('trace.settings.v1') || '{}');
+  s.theme = 'brick'; localStorage.setItem('trace.settings.v1', JSON.stringify(s));
+  return true;
+})()`);
+await send("Page.reload", { ignoreCache: true });
+await wait(3000);
+const opened2 = await openShare();
+await wait(800);
+const stale = await ev(`(() => {
+  const m = Array.from(document.querySelectorAll('.card.modal')).find(x => (x.textContent||'').includes('링크로 공유'));
+  if (!m) return 'NO_MODAL';
+  return JSON.stringify({
+    warn: /링크를 만든 뒤에/.test(m.textContent),
+    again: !!Array.from(m.querySelectorAll('button')).find(b => (b.textContent||'').includes('다시 만들기'))
+  });
+})()`);
+const st = /^NO_/.test(stale) ? null : JSON.parse(stale);
+check("모양을 바꾸면 «다시 만들라» 고 알려 준다",
+  opened2 === "OK" && !!st && st.warn && st.again, stale);
+await ev(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
+await wait(300);
 
 const realErrors = errors.filter(e => !/GSI_LOGGER|popup|ERR_INTERNET|ERR_NAME|gsi\/client/i.test(String(e)));
 check("가져오고 고치고 지우는 내내 오류 없음", realErrors.length === 0, realErrors[0] || "");
