@@ -632,7 +632,13 @@ const shareUi = await ev(`(() => {
   if (!m) return 'NO_MODAL';
   return m.textContent;
 })()`);
-check("공유 창에 «웹 페이지로» 가 생겼다", /웹 페이지/.test(String(shareUi)), String(shareUi).slice(0, 90));
+/* 넷이 비슷해 보이면 «무엇을 눌러야 하나» 가 안 잡힌다.
+   이름이 갈려 있고, 고르는 잣대가 한 줄로 있어야 한다. */
+const rows = ["① 🌐 웹 쪽으로", "② 📰 구글 문서 쪽으로", "③ 📄 구글 문서 파일", "④ 📁 폴더 통째로"];
+check("공유하는 길 넷이 이름으로 갈려 있다",
+  rows.every(r => String(shareUi).indexOf(r) >= 0),
+  rows.filter(r => String(shareUi).indexOf(r) < 0).join(" / ") || "넷 다 있음");
+check("무엇을 고를지 한 줄로 알려 준다", /고르는 잣대/.test(String(shareUi)));
 await ev(`(() => { document.querySelectorAll('.modal-bg').forEach(b => b.remove()); return true; })()`);
 await wait(300);
 
